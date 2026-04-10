@@ -16,31 +16,34 @@ def apply_custom_styles(file_path):
         with open(file_path, "rb") as f:
             data = base64.b64encode(f.read()).decode()
         
-        # Koristimo f-string i dvostruke zagrade {{ }} za CSS da izbjegnemo KeyError
         st.markdown(f'''
             <style>
             .stApp {{
                 background-image: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), url("data:image/jpeg;base64,{data}");
                 background-size: cover; background-attachment: fixed;
             }}
-            /* Skrivanje gumba za "View fullscreen" */
+            /* Skrivanje Streamlit kontrola */
             button[title="View fullscreen"] {{
                 display: none !important;
             }}
-            /* FIKSNI KONTEJNER: sprečava pomicanje albuma */
+            /* ZBIJANJE REDOVA: Smanjena visina i margina */
             .slicica-slot {{
-                height: 220px; 
+                height: 185px; 
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: center;
-                margin-bottom: 10px;
+                justify-content: flex-start;
+                margin-bottom: -15px; /* Negativna margina za dodatno zbijanje */
+            }}
+            /* Smanjenje razmaka između elemenata unutar slota */
+            .stCaption {{
+                font-size: 10px !important;
+                margin-top: -5px !important;
             }}
             </style>
         ''', unsafe_allow_html=True)
 
-# Postavljanje pozadine
-apply_custom_styles('image_50927d.jpg')
+apply_custom_styles('image_50927d.jpg') #
 
 # --- 4. STANJE APLIKACIJE ---
 if 'album' not in st.session_state: st.session_state.album = {}      
@@ -63,9 +66,9 @@ with st.sidebar:
     st.metric("Paketići", st.session_state.paketi)
 
 # --- 7. NASLOV I OTVARANJE ---
-st.markdown("<h1 style='text-align: center; color: #8B0000;'>Zagor: Digitalni Album</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #8B0000;'>Zagor: Digitalni Album</h2>", unsafe_allow_html=True)
 
-c1, c2, c3 = st.columns([1, 2, 1])
+c1, c2, c3 = st.columns([1, 1, 1])
 with c2:
     if st.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
         if st.session_state.paketi > 0:
@@ -80,11 +83,10 @@ if st.session_state.na_cekanju:
     for i, br in enumerate(st.session_state.na_cekanju[:10]):
         with cols_ruka[i % 5]:
             p = get_file_path(br)
-            if os.path.exists(p): st.image(p, width=100)
-            if st.button(f"Zalijepi #{br}", key=f"stick_{i}_{br}"):
+            if os.path.exists(p): st.image(p, width=90)
+            if st.button(f"Zalijepi #{br}", key=f"s_{i}_{br}"):
                 st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
                 st.session_state.na_cekanju.pop(i)
-                # Skok na stranicu
                 start_p = ((br - 1) // 20) * 20 + 1
                 st.session_state.pregled_raspon = f"{start_p}-{min(start_p+19, UKUPNO_SLICICA)}"
                 st.rerun()
@@ -102,22 +104,20 @@ start_br, end_br = map(int, izabrani.split("-"))
 cols_album = st.columns(5)
 for i in range(start_br, end_br + 1):
     with cols_album[(i - start_br) % 5]:
-        # Fiksni okvir koji drži visinu
         st.markdown('<div class="slicica-slot">', unsafe_allow_html=True)
         
         if i in st.session_state.album:
             putanja = get_file_path(i)
             if os.path.exists(putanja):
-                # Povećano za 20% (width=120)
-                st.image(putanja, width=120)
+                st.image(putanja, width=120) #
             else:
                 st.write(f"Zalijepljeno #{i}")
         else:
-            # Tamni prozirni stil
+            # Smanjena visina praznog polja radi zbijanja redova
             st.markdown(f'''
-                <div style="height:160px; width:120px; border-radius:10px; 
+                <div style="height:150px; width:115px; border-radius:8px; 
                 display:flex; align-items:center; justify-content:center; 
-                color:#999; background: rgba(0,0,0,0.5); font-size: 11px;">
+                color:#bbb; background: rgba(0,0,0,0.6); font-size: 10px;">
                 Fali #{i}
                 </div>
             ''', unsafe_allow_html=True)
