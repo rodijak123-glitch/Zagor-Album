@@ -10,7 +10,7 @@ st.set_page_config(page_title="Zagor: Kolekcionar", layout="wide")
 UKUPNO_SLICICA = 458 
 SLICICA_U_PAKETU = 5
 
-# --- 3. POZADINA I FIKSIRANJE DIZAJNA ---
+# --- 3. POZADINA I TOTALNO ZBIJANJE ---
 def apply_custom_styles(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -18,39 +18,51 @@ def apply_custom_styles(file_path):
         
         st.markdown(f'''
             <style>
+            /* Pozadina albuma */
             .stApp {{
                 background-image: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), url("data:image/jpeg;base64,{data}");
                 background-size: cover; background-attachment: fixed;
             }}
-            /* Skrivanje Streamlit kontrola */
+            
+            /* Uklanjanje razmaka između blokova u Streamlitu */
+            [data-testid="stVerticalBlock"] > div {{
+                padding-top: 0rem !important;
+                padding-bottom: 0rem !important;
+            }}
+
+            /* Skrivanje kontrola za sliku */
             button[title="View fullscreen"] {{
                 display: none !important;
             }}
-            /* ZBIJANJE REDOVA: Smanjena visina i margina */
+
+            /* FIKSNI KONTEJNER - Drastično smanjena visina za zbijanje */
             .slicica-slot {{
-                height: 185px; 
+                height: 165px; 
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: flex-start;
-                margin-bottom: -15px; /* Negativna margina za dodatno zbijanje */
+                margin-bottom: -25px !important; /* Jako agresivno zbijanje redova */
+                padding: 0px !important;
             }}
-            /* Smanjenje razmaka između elemenata unutar slota */
-            .stCaption {{
-                font-size: 10px !important;
-                margin-top: -5px !important;
+
+            /* Stil za broj sličice ispod slike */
+            .caption-text {{
+                font-size: 11px;
+                color: #444;
+                margin-top: -5px;
             }}
             </style>
         ''', unsafe_allow_html=True)
 
-apply_custom_styles('image_50927d.jpg') #
+apply_custom_styles('image_50927d.jpg')
 
 # --- 4. STANJE APLIKACIJE ---
 if 'album' not in st.session_state: st.session_state.album = {}      
 if 'na_cekanju' not in st.session_state: st.session_state.na_cekanju = [] 
 if 'paketi' not in st.session_state: st.session_state.paketi = 5
 
-# --- 5. PUTANJE SLIKA ---
+# --- 5. PUTANJE ---
 def get_file_path(broj):
     f = "slike/"
     if broj <= 75: return f"{f}TN_ZG_EXT_{broj}.jpeg"      #
@@ -66,7 +78,7 @@ with st.sidebar:
     st.metric("Paketići", st.session_state.paketi)
 
 # --- 7. NASLOV I OTVARANJE ---
-st.markdown("<h2 style='text-align: center; color: #8B0000;'>Zagor: Digitalni Album</h2>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #8B0000; margin-bottom: 0px;'>Zagor: Digitalni Album</h3>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns([1, 1, 1])
 with c2:
@@ -76,7 +88,7 @@ with c2:
             st.session_state.na_cekanju.extend([random.randint(1, UKUPNO_SLICICA) for _ in range(SLICICA_U_PAKETU)])
             st.rerun()
 
-# --- 8. PROSTOR ZA LIJEPLJENJE ---
+# --- 8. LIJEPLJENJE ---
 if st.session_state.na_cekanju:
     st.write("### 📥 Sličice u ruci:")
     cols_ruka = st.columns(5)
@@ -101,6 +113,7 @@ izabrani = st.select_slider("Stranica:", options=options, value=st.session_state
 st.session_state.pregled_raspon = izabrani
 start_br, end_br = map(int, izabrani.split("-"))
 
+# Prikaz sličica u albumu
 cols_album = st.columns(5)
 for i in range(start_br, end_br + 1):
     with cols_album[(i - start_br) % 5]:
@@ -109,18 +122,19 @@ for i in range(start_br, end_br + 1):
         if i in st.session_state.album:
             putanja = get_file_path(i)
             if os.path.exists(putanja):
-                st.image(putanja, width=120) #
+                # Povećano za 20% (width=120)
+                st.image(putanja, width=120)
             else:
                 st.write(f"Zalijepljeno #{i}")
         else:
-            # Smanjena visina praznog polja radi zbijanja redova
+            # Tamni okvir iz originalnog dizajna
             st.markdown(f'''
-                <div style="height:150px; width:115px; border-radius:8px; 
+                <div style="height:140px; width:105px; border-radius:8px; 
                 display:flex; align-items:center; justify-content:center; 
-                color:#bbb; background: rgba(0,0,0,0.6); font-size: 10px;">
+                color:#999; background: rgba(0,0,0,0.6); font-size: 10px; border: 1px solid rgba(255,255,255,0.1);">
                 Fali #{i}
                 </div>
             ''', unsafe_allow_html=True)
             
-        st.caption(f"Br. {i}")
+        st.markdown(f'<div class="caption-text">Br. {i}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
