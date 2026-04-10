@@ -1,23 +1,17 @@
 import streamlit as st
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import base64
 
 # --- 1. KONFIGURACIJA ---
-st.set_page_config(page_title="Zagor: Domaća Kolekcija", layout="wide")
+st.set_page_config(page_title="Zagor: Kolekcionar", layout="wide")
 
-# --- 2. DEFINICIJA ALBUMA ---
+# --- 2. DEFINICIJA ---
 UKUPNO_SLICICA = 458 
 SLICICA_U_PAKETU = 5
-POCETNI_PAKETI = 5
-REFILL_MINUTA = 30
 
-GRANICA_EXTRA_PRVI_DIO = 75
-GRANICA_EXTRA_UKUPNO = 385
-GRANICA_SPECIJALI = 431 
-
-# --- 3. FUNKCIJA ZA POZADINU ---
+# --- 3. POZADINA ---
 def set_background(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -27,111 +21,103 @@ def set_background(file_path):
             <style>
             .stApp {{
                 background-image: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)), url("data:image/jpeg;base64,{bin_str}");
-                background-size: cover; 
-                background-attachment: fixed;
+                background-size: cover; background-attachment: fixed;
             }}
-            [data-testid="stSidebar"] {{ background-color: rgba(255, 255, 255, 0.5); }}
             </style>
             ''', unsafe_allow_html=True)
 
-# Postavljanje tvoje slike kao pozadine
-set_background('image_50927d.jpg') 
+set_background('image_50927d.jpg')
 
-# --- 4. INICIJALIZACIJA STANJA ---
+# --- 4. STANJE APLIKACIJE ---
 if 'album' not in st.session_state:
-    st.session_state.album = {}
-    st.session_state.paketi = POCETNI_PAKETI
-    st.session_state.zadnji_refill = datetime.now()
+    st.session_state.album = {}      # Zalijepljene sličice
+if 'na_cekanju' not in st.session_state:
+    st.session_state.na_cekanju = [] # Izvučene, ne-zalijepljene
+if 'paketi' not in st.session_state:
+    st.session_state.paketi = 5
 
-# --- 5. LOGIKA ZA NAZIVE DATOTEKA ---
+# --- 5. POMOĆNE FUNKCIJE ---
 def get_file_path(broj):
     folder = "slike/"
-    if broj <= GRANICA_EXTRA_PRVI_DIO:
-        return f"{folder}TN_ZG_EXT_{broj}.jpeg"
-    elif broj <= GRANICA_EXTRA_UKUPNO:
-        return f"{folder}TN_ZG_LEX_{broj}.jpeg"
-    elif broj <= GRANICA_SPECIJALI:
-        br_spec = broj - GRANICA_EXTRA_UKUPNO
-        return f"{folder}TN_ZG_LUSP_{br_spec}.jpeg"
-    else:
-        br_cico = broj - GRANICA_SPECIJALI
-        return f"{folder}TN_ZG_LUCI_{br_cico}.jpeg"
+    if broj <= 75: return f"{folder}TN_ZG_EXT_{broj}.jpeg"
+    elif broj <= 385: return f"{folder}TN_ZG_LEX_{broj}.jpeg"
+    elif broj <= 431: return f"{folder}TN_ZG_LUSP_{broj-385}.jpeg"
+    else: return f"{folder}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 6. STIL KARTICA ---
-st.markdown("""
-    <style>
-    .slicica-okvir {
-        width: 100%; aspect-ratio: 2/3; border: 2px solid #8B0000;
-        border-radius: 8px; display: flex; align-items: center;
-        justify-content: center; background-color: rgba(0,0,0,0.8);
-        overflow: hidden; margin-bottom: 5px;
-    }
-    .slicica-img { width: 100%; height: 100%; object-fit: cover; }
-    .fali-tekst { color: #888; font-size: 0.7rem; font-weight: bold; text-align: center; }
-    </style>
-    """, unsafe_allow_html=True)
-
-def prikazi_slicicu(broj, kolicina=None, fali=False):
-    path = get_file_path(broj)
-    if fali:
-        st.markdown(f'<div class="slicica-okvir"><div class="fali-tekst">Fali #{broj}</div></div>', unsafe_allow_html=True)
-    else:
-        if os.path.exists(path):
-            st.image(path)
-        else:
-            st.markdown(f'<div class="slicica-okvir"><div style="color:white;">#{broj}<br><small>Nema slike</small></div></div>', unsafe_allow_html=True)
-        
-        txt = f"#{broj}" + (f" (x{kolicina})" if kolicina and kolicina > 1 else "")
-        st.caption(txt)
-
-# --- 7. SIDEBAR (STATISTIKA) ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
-    st.header("👤 Tvoja Kolekcija")
+    st.header("👤 Statistika")
     sakupljeno = len(st.session_state.album)
-    st.metric("Sakupljeno", f"{sakupljeno} / {UKUPNO_SLICICA}", f"{(sakupljeno/UKUPNO_SLICICA*100):.1f}%")
-    st.divider()
-    st.metric("📦 Dostupni paketići", st.session_state.paketi)
+    st.metric("Zalijepljeno", f"{sakupljeno} / {UKUPNO_SLICICA}")
+    st.metric("Paketići", st.session_state.paketi)
+    if st.session_state.na_cekanju:
+        st.warning(f"Imaš {len(st.session_state.na_cekanju)} sličica za zalijepiti!")
 
-# --- 8. GLAVNI NASLOV ---
-st.markdown("<h1 style='text-align: center; color: #8B0000; margin-top: -50px;'>Zagor: Domaći Digitalni Album</h1>", unsafe_allow_html=True)
+# --- 7. OTVARANJE PAKETIĆA ---
+st.markdown("<h1 style='text-align: center; color: #8B0000;'>Zagor: Digitalni Kolekcionar</h1>", unsafe_allow_html=True)
 
-# --- 9. OTVARANJE PAKETIĆA ---
-st.divider()
-if st.button("OTVORI PAKETIĆ 📦 (5 sličica)", use_container_width=True):
-    if st.session_state.paketi > 0:
-        st.session_state.paketi -= 1
-        nove = [random.randint(1, UKUPNO_SLICICA) for _ in range(SLICICA_U_PAKETU)]
-        st.session_state.zadnji_paket = nove
-        for br in nove:
-            st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
-        st.balloons()
-    else:
-        st.error("Nemaš više paketića!")
+col_centar = st.columns([1, 2, 1])[1]
+with col_centar:
+    if st.button("OTVORI NOVI PAKETIĆ 📦", use_container_width=True):
+        if st.session_state.paketi > 0:
+            st.session_state.paketi -= 1
+            nove = [random.randint(1, UKUPNO_SLICICA) for _ in range(SLICICA_U_PAKETU)]
+            st.session_state.na_cekanju.extend(nove)
+            st.rerun()
+        else:
+            st.error("Nemaš više paketića!")
 
-if 'zadnji_paket' in st.session_state:
-    st.subheader("U paketiću si dobio:")
+# --- 8. PROSTOR ZA LIJEPLJENJE (Sličice na čekanju) ---
+if st.session_state.na_cekanju:
+    st.subheader("📥 Sličice u ruci (Klikni na sliku da je zalijepiš u album):")
     cols = st.columns(5)
-    for i, br in enumerate(st.session_state.zadnji_paket):
-        with cols[i]:
-            prikazi_slicicu(br)
+    for i, br in enumerate(st.session_state.na_cekanju[:10]): # Prikazujemo prvih 10 za lijepljenje
+        with cols[i % 5]:
+            putanja = get_file_path(br)
+            if os.path.exists(putanja):
+                st.image(putanja, width=120)
+            if st.button(f"Zalijepi #{br}", key=f"wait_{i}_{br}"):
+                st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
+                st.session_state.na_cekanju.pop(i)
+                st.toast(f"Sličica #{br} je zalijepljena!", icon="✅")
+                time_to_scroll = (br // 20) * 20
+                st.session_state.pregled_raspon = f"{max(1, time_to_scroll)}-{min(time_to_scroll+19, UKUPNO_SLICICA)}"
+                st.rerun()
 
-# --- 10. PREGLED ALBUMA ---
+# --- 9. PREGLED ALBUMA ---
 st.divider()
-st.header("📖 Pregled Albuma")
-sekcija = st.radio("Edicija:", ["Sve", "Extra (1-385)", "Specijali (386-431)", "Čiko (432-458)"], horizontal=True)
+st.header("📖 Album")
 
-if sekcija == "Extra (1-385)": r_min, r_max = 1, 385
-elif sekcija == "Specijali (386-431)": r_min, r_max = 386, 431
-elif sekcija == "Čiko (432-458)": r_min, r_max = 432, 458
-else: r_min, r_max = 1, UKUPNO_SLICICA
+# Pamćenje stranice na kojoj smo bili
+options = [f"{i}-{min(i+19, UKUPNO_SLICICA)}" for i in range(1, UKUPNO_SLICICA + 1, 20)]
+if 'pregled_raspon' not in st.session_state:
+    st.session_state.pregled_raspon = options[0]
 
-raspon = st.select_slider("Stranice:", options=[f"{i}-{min(i+19, r_max)}" for i in range(r_min, r_max + 1, 20)])
-start_br, end_br = map(int, raspon.split("-"))
+izabrani_raspon = st.select_slider("Stranica:", options=options, key="slider_album", value=st.session_state.pregled_raspon)
+start_br, end_br = map(int, izabrani_raspon.split("-"))
 
 cols_album = st.columns(5)
 for i in range(start_br, end_br + 1):
     with cols_album[(i - start_br) % 5]:
         if i in st.session_state.album:
-            prikazi_slicicu(i, kolicina=st.session_state.album[i])
+            putanja = get_file_path(i)
+            if os.path.exists(putanja):
+                # Klik na sliku otvara "veliki prikaz" u dialogu (zumiranje)
+                if st.button(f"🔍 Povećaj #{i}", key=f"zoom_{i}"):
+                    @st.dialog(f"Sličica #{i}")
+                    def zoom_image(p):
+                        st.image(p, use_container_width=True)
+                        st.write(f"Količina u albumu: {st.session_state.album[i]}")
+                    zoom_image(putanja)
+                
+                st.image(putanja, use_container_width=True)
+            else:
+                st.write(f"Zalijepljeno #{i}")
         else:
-            prikazi_slicicu(i, fali=True)
+            st.markdown(f'''
+                <div style="height:180px; border:1px dashed #888; border-radius:5px; 
+                display:flex; align-items:center; justify-content:center; color:#888; font-size:12px;">
+                Fali #{i}
+                </div>
+            ''', unsafe_allow_html=True)
+        st.caption(f"Br. {i}")
