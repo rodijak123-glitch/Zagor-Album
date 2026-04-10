@@ -1,33 +1,24 @@
 import streamlit as st
 import random
 import os
-import base64
 import json
 from datetime import datetime
 
-# --- 1. OSNOVNE POSTAVKE ---
+# --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
-def get_base64(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return None
-
-# ČISTI CSS ZA POZADINU
-bg_data = get_base64('image_50927d.jpg')
+# CSS koji samo postavlja pozadinu, ne dira tekst
 st.markdown(f'''
 <style>
     .stApp {{
-        background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/jpeg;base64,{bg_data}");
-        background-size: cover; background-attachment: fixed;
+        background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url("https://wallpaperaccess.com/full/2454558.jpg");
+        background-size: cover;
     }}
-    .stMarkdown, p, h1, h2, h3, span {{ color: white !important; }}
+    .stMarkdown, p, h1, h2, h3 {{ color: white !important; }}
 </style>
 ''', unsafe_allow_html=True)
 
 def get_file_path(broj):
-    # Fix za putanje slika
     f = "slike/"
     if broj <= 75: return f"{f}TN_ZG_EXT_{broj}.jpeg"
     elif broj <= 385: return f"{f}TN_ZG_LEX_{broj}.jpeg"
@@ -45,27 +36,28 @@ def spremi_u_bazu(baza_data):
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK I ČIŠĆENJE 413 ---
+# --- 3. KORISNIK I FIX ZA 413 ---
 st.title("🛡️ Zagor Digitalni Album")
-ja = st.text_input("👤 Unesi ime:", value="Gost").strip()
+ja = st.text_input("👤 Prijavi se:", value="Nike").strip()
 
 if ja not in baza:
     baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "ponude": [], "u_ruci": []}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-# Automatsko čišćenje duplikata koji su zalijepljeni
+# Čišćenje duplikata koji su već zalijepljeni
 moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
 
-# --- 4. SIGURNI BROJČANIK (BEZ REZANJA) ---
+# --- 4. BROJČANIK (SADA NA GUMBIMA DA SE VIDI) ---
+# Ako ti fali gornji brojčanik, on je sada dio navigacije
 st.write("---")
-col_b1, col_b2 = st.columns(2)
-with col_b1:
-    st.subheader(f"📖 Zalijepljeno: {len(moj_data['album'])}/458")
-with col_b2:
-    st.subheader(f"📦 Paketići: {moj_data['paketi']}")
+col_stat1, col_stat2 = st.columns(2)
+with col_stat1:
+    st.button(f"📖 Zalijepljeno: {len(moj_data['album'])}/458", disabled=True, use_container_width=True)
+with col_stat2:
+    st.button(f"📦 Paketići: {moj_data['paketi']}", disabled=True, use_container_width=True)
 
-if st.button("🎁 OTVORI PAKETIĆ", use_container_width=True):
+if st.button("🎁 OTVORI NOVI PAKETIĆ", use_container_width=True):
     if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
         moj_data["paketi"] -= 1
         moj_data["u_ruci"] = random.sample(range(1, 459), 5)
@@ -90,22 +82,22 @@ if moj_data.get("u_ruci"):
 
 st.divider()
 
-# --- 6. ALBUM (ČISTI STREAMLIT COLUMNS) ---
+# --- 6. ALBUM (SADA 100% VIDLJIV) ---
 st.subheader("📖 Pregled Albuma")
 opcije = [f"{i}-{min(i+14, 458)}" for i in range(1, 459, 15)]
 izabrano = st.select_slider("Stranica:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
-# Prikaz 15 slika pomoću nativnih stupaca (5 po redu)
-for row in range(3):
+# Crtanje albuma bez ikakvog HTML-a, samo st.columns i st.image
+for r in range(3):
     cols = st.columns(5)
-    for col in range(5):
-        slicica_id = start + (row * 5) + col
-        if slicica_id <= end:
-            with cols[col]:
-                if slicica_id in moj_data["album"]:
-                    st.image(get_file_path(slicica_id), caption=f"Br. {slicica_id}", use_container_width=True)
+    for c in range(5):
+        idx = start + (r * 5) + c
+        if idx <= end:
+            with cols[c]:
+                if idx in moj_data["album"]:
+                    # Ako je sličica zalijepljena, prikaži sliku
+                    st.image(get_file_path(idx), caption=f"Br. {idx}", use_container_width=True)
                 else:
-                    # Prazan okvir bez HTML-a koji može "puknuti"
-                    st.markdown(f"🔳 **Fali #{slicica_id}**")
-                    st.write(f"ID: {slicica_id}")
+                    # Ako fali, prikaži sivi gumb kao okvir koji se ne može pomicati
+                    st.button(f"❌ Fali #{idx}", key=f"slot_{idx}", disabled=True, use_container_width=True)
