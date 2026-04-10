@@ -4,7 +4,6 @@ import os
 import base64
 import json
 from datetime import datetime, timedelta
-import time
 
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
@@ -60,6 +59,8 @@ if ja not in baza:
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
+
+# OSIGURANJE KLJUČEVA
 for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 if "zadnji_gratis" not in moj_data:
@@ -67,7 +68,7 @@ if "zadnji_gratis" not in moj_data:
 
 moj_data["duplikati"] = [d for d in moj_data["duplikati"] if d not in moj_data["album"]]
 
-# --- 4. BROJČANICI I TIMER (IZMJENA 1) ---
+# --- 4. BROJČANICI I TIMER ---
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
@@ -77,7 +78,7 @@ with col2:
     st.markdown(f'<div class="metric-box">📦 Paketići<br><span style="font-size:30px; font-weight:bold;">{moj_data["paketi"]}</span></div>', unsafe_allow_html=True)
 
 with col3:
-    # LOGIKA TIMERA
+    # LOGIKA TIMERA (Bez non-stop refreshanja)
     sad = datetime.now()
     zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
     razlika = sad - zadnje
@@ -87,14 +88,11 @@ with col3:
         minuta = sekundi_ostalo // 60
         sekundi = sekundi_ostalo % 60
         st.button(f"⏳ Novi paketi za {minuta:02d}:{sekundi:02d}", disabled=True, use_container_width=True)
-        time.sleep(1) # Lagano osvježavanje
-        st.rerun()
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
             moj_data["zadnji_gratis"] = str(datetime.now())
             spremi_u_bazu(baza)
-            st.success("Preuzeta 2 paketića!")
             st.rerun()
 
     if st.button("📦 OTVORI PAKETIĆ IZ ZALIHE", use_container_width=True):
@@ -104,10 +102,25 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE I TRŽNICA (Ostaje isto kao u tvojoj bazi) ---
-# ... (ovdje ide tvoj kod za lijepljenje i tržnicu) ...
+# --- 5. LIJEPLJENJE --- (Dodano da ne fali u kodu)
+if moj_data["u_ruci"]:
+    st.write("---")
+    cols = st.columns(5)
+    for i, br in enumerate(list(moj_data["u_ruci"])):
+        with cols[i]:
+            st.image(get_file_path(br), use_container_width=True)
+            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}"):
+                if br in moj_data["album"]:
+                    if br not in moj_data["duplikati"]: moj_data["duplikati"].append(br)
+                else:
+                    moj_data["album"].append(br)
+                moj_data["u_ruci"].remove(br)
+                spremi_u_bazu(baza)
+                st.rerun()
 
-# --- 6. ALBUM GRID (IZMJENA 2: UKLANJANJE PRAZNOG PROSTORA) ---
+st.divider()
+
+# --- 6. ALBUM GRID (Smanjen height na 1000px) ---
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
 izabrano = st.select_slider("Stranica:", options=opcije)
@@ -123,6 +136,6 @@ for i in range(start, end + 1):
     grid_html += f'<div>{content}<div style="color:white; text-align:center; margin-top:5px; font-weight:bold;">Br. {i}</div></div>'
 grid_html += '</div>'
 
-# IZMJENA: height je smanjen sa 1300 na 700 da se eliminira prazan prostor
 import streamlit.components.v1 as components
-components.html(grid_html, height=700)
+# Visina 1000 je dovoljna za 4 reda bez rezanja okvira
+components.html(grid_html, height=1000)
