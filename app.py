@@ -5,7 +5,7 @@ import base64
 import json
 from datetime import datetime, timedelta
 
-# --- 1. KONFIGURACIJA ---
+# --- 1. KONFIGURACIJA (Ne diramo okvire) ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
 def get_base64(file_path):
@@ -36,7 +36,6 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 2. BAZA PODATAKA ---
 DB_FILE = "album_baza.json"
 def ucitaj_bazu():
     if os.path.exists(DB_FILE):
@@ -47,19 +46,14 @@ def spremi_u_bazu(baza_data):
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK ---
 ja = st.text_input("Tvoje ime:", value="Nike").strip()
 if ja not in baza:
     baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-for k in ["album", "duplikati", "ponude", "u_ruci"]:
-    if k not in moj_data: moj_data[k] = []
-if "zadnji_gratis" not in moj_data:
-    moj_data["zadnji_gratis"] = str(datetime.now() - timedelta(minutes=30))
 
-# --- 4. BROJČANICI I FIX ZA LIVE TIMER ---
+# --- 4. BROJČANICI I ROBUSTAN TIMER ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -72,28 +66,31 @@ with col3:
     sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
-        # ISPRAVAK: JS sada precizno cilja 'countdown' i ispisuje brojke
+        # Prikazujemo box, a JS će ga popuniti čim se učita
         st.markdown(f"""
             <div class="metric-box" style="background: rgba(0,0,0,0.6); border-color: #ff4b4b;">
                 ⌛ Novi paketi za:<br>
-                <span id="countdown" style="font-size:35px; font-weight:bold; color: #ff4b4b;"></span>
+                <span id="countdown" style="font-size:35px; font-weight:bold; color: #ff4b4b;">Učitavam...</span>
             </div>
             <script>
-                var seconds = {sekundi_ostalo};
-                function startTimer() {{
-                    var display = document.getElementById("countdown");
-                    var timer = setInterval(function() {{
+                (function() {{
+                    var seconds = {sekundi_ostalo};
+                    function update() {{
+                        var display = document.getElementById("countdown");
+                        if (!display) return; 
                         var m = Math.floor(seconds / 60);
                         var s = seconds % 60;
                         display.innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-                        if (seconds <= 0) {{
-                            clearInterval(timer);
-                            window.location.reload();
-                        }}
-                        seconds--;
-                    }}, 1000);
-                }}
-                startTimer();
+                        if (seconds <= 0) {{ window.location.reload(); }}
+                        else {{ seconds--; setTimeout(update, 1000); }}
+                    }}
+                    // Pokreni čim je DOM spreman
+                    if (document.readyState === "complete" || document.readyState === "interactive") {{
+                        update();
+                    }} else {{
+                        window.addEventListener("DOMContentLoaded", update);
+                    }}
+                }})();
             </script>
         """, unsafe_allow_html=True)
     else:
@@ -110,8 +107,8 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE I TRŽNICA (Ostaje original) ---
-if moj_data["u_ruci"]:
+# --- 5. LIJEPLJENJE I TRŽNICA (Original) ---
+if moj_data.get("u_ruci"):
     st.write("---")
     cols = st.columns(5)
     for i, br in enumerate(list(moj_data["u_ruci"])):
@@ -124,7 +121,7 @@ if moj_data["u_ruci"]:
                 spremi_u_bazu(baza)
                 st.rerun()
 
-# --- 6. ALBUM GRID (Vraćanje visine na 1200px - "zlatna sredina") ---
+# --- 6. ALBUM GRID (Visina 1200px po dogovoru) ---
 st.divider()
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
@@ -142,5 +139,4 @@ for i in range(start, end + 1):
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-# Vraćeno na 1200px kako bi se izbjeglo rezanje i omogućio puni prikaz albuma
 components.html(grid_html, height=1200)
