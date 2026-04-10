@@ -5,7 +5,7 @@ import base64
 
 st.set_page_config(page_title="Zagor: Kolekcionar", layout="wide")
 
-# --- FUNKCIJA ZA SLIKE ---
+# --- 1. POMOĆNE FUNKCIJE ---
 def get_base64(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -19,12 +19,12 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- STANJE APLIKACIJE ---
+# --- 2. STANJE ---
 if 'album' not in st.session_state: st.session_state.album = {}
 if 'na_cekanju' not in st.session_state: st.session_state.na_cekanju = []
 if 'paketi' not in st.session_state: st.session_state.paketi = 10
 
-# --- CSS (Fiksiranje razmaka na 1cm i okvira +20%) ---
+# --- 3. CSS ZA FIKSNE RAZMAKE I POVEĆANE OKVIRE ---
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
     <style>
@@ -32,36 +32,33 @@ st.markdown(f'''
         background-image: linear-gradient(rgba(255,255,255,0.7), rgba(255,255,255,0.7)), url("data:image/jpeg;base64,{bg_data}");
         background-size: cover; background-attachment: fixed;
     }}
-    
-    /* Uklanjanje sidebara i gornjeg praznog prostora */
     [data-testid="stSidebar"] {{ display: none; }}
-    .block-container {{ padding-top: 1rem !important; }}
-
-    /* MREŽA S FIKSNIM RAZMAKOM (cca 1cm) */
+    .block-container {{ padding: 10px !important; }}
+    
+    /* MREŽA KOJA DOZVOLJAVA SAMO 1CM RAZMAKA */
     .album-grid {{
         display: grid;
         grid-template-columns: repeat(5, 1fr);
-        column-gap: 20px;
-        row-gap: 35px; /* Razmak između redova fiksiran na ~1cm */
+        column-gap: 15px;
+        row-gap: 25px; /* Strogo fiksiran vertikalni razmak */
         margin-top: 10px;
     }}
     
     .slot {{
         text-align: center;
-        width: 150px; /* Povećano za 20% */
+        width: 150px; /* Okvir +20% */
         margin: auto;
     }}
     
     .okvir {{
-        width: 150px; /* 120px + 20% */
-        height: 200px; /* 160px + 20% */
+        width: 150px;
+        height: 200px;
         background: rgba(0,0,0,0.7);
         border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #aaa;
-        font-size: 14px;
+        color: #888;
         border: 2px solid rgba(255,255,255,0.1);
     }}
     
@@ -70,46 +67,61 @@ st.markdown(f'''
         height: 200px;
         object-fit: cover;
         border-radius: 12px;
-        box-shadow: 3px 3px 15px rgba(0,0,0,0.5);
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
     }}
     
-    .broj {{
-        font-size: 13px;
-        color: #222;
-        margin-top: 5px;
-        font-weight: bold;
+    .broj {{ 
+        font-size: 13px; 
+        font-weight: bold; 
+        color: #111;
+        margin-top: 2px;
     }}
     </style>
 ''', unsafe_allow_html=True)
 
-# --- STATUS I KONTROLE ---
-st.markdown("<h2 style='text-align: center; color: #8B0000; margin-bottom: 0;'>Zagor: Digitalni Album</h2>", unsafe_allow_html=True)
+# --- 4. TOP UI ---
+st.markdown("<h2 style='text-align: center; color: #8B0000; margin: 0;'>Zagor: Digitalni Album</h2>", unsafe_allow_html=True)
 
-col_info = st.columns([1, 1, 1])
-col_info[0].metric("Zalijepljeno", f"{len(st.session_state.album)}/458")
-col_info[1].metric("Paketići", st.session_state.paketi)
-if col_info[2].button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
+c1, c2, c3 = st.columns([1, 1, 1.5])
+c1.metric("Zalijepljeno", f"{len(st.session_state.album)}/458")
+c2.metric("Paketići", st.session_state.paketi)
+if c3.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
     if st.session_state.paketi > 0:
         st.session_state.paketi -= 1
         st.session_state.na_cekanju.extend([random.randint(1, 458) for _ in range(5)])
         st.rerun()
 
+# --- 5. LIJEPLJENJE ---
+if st.session_state.na_cekanju:
+    st.write("---")
+    st.write("### 📥 Sličice u ruci:")
+    cols = st.columns(5)
+    for i, br in enumerate(st.session_state.na_cekanju[:5]):
+        with cols[i]:
+            path = get_file_path(br)
+            img_b64 = get_base64(path)
+            if img_b64:
+                st.markdown(f'<img src="data:image/jpeg;base64,{img_b64}" width="110">', unsafe_allow_html=True)
+            if st.button(f"Zalijepi {br}", key=f"btn_{i}"):
+                st.session_state.album[br] = True
+                st.session_state.na_cekanju.pop(i)
+                st.rerun()
+
 st.divider()
 
-# --- NAVIGACIJA ---
-stranice = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
-izabrana = st.select_slider("Izaberi stranicu:", options=stranice)
-start, end = map(int, izabrana.split("-"))
+# --- 6. NAVIGACIJA I MREŽA ---
+options = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
+izabrano = st.select_slider("Izaberi stranicu:", options=options)
+start, end = map(int, izabrano.split("-"))
 
-# --- GENERIRANJE ALBUMA (Korištenje tvog HTML-a u petlji) ---
+# Generiranje HTML-a prema tvojoj strukturi
 grid_html = '<div class="album-grid">'
 for i in range(start, end + 1):
     if i in st.session_state.album:
-        img_b64 = get_base64(get_file_path(i))
+        img_b64 = get_base64(get_file_path(i)) #
         content = f'<img src="data:image/jpeg;base64,{img_b64}" class="zalijepljena">'
     else:
-        # Ovo je tvoj HTML blok prilagođen za petlju
-        content = f'<div class="okvir">Fali #{i}</div>'
+        content = f'<div class="okvir">Fali #{i}</div>' #
     
     grid_html += f'''
         <div class="slot">
