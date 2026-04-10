@@ -67,4 +67,37 @@ st.divider()
 if st.button("OTVORI PAKETIĆ 📦"):
     if st.session_state.paketi > 0:
         st.session_state.paketi -= 1
-        nove = [random.randint(1, UKUPNO_SLICICA
+        nove = [random.randint(1, UKUPNO_SLICICA) for _ in range(SLICICA_U_PAKETU)]
+        
+        st.subheader("Dobio si:")
+        cols_nove = st.columns(4)
+        for i, br in enumerate(nove):
+            st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
+            with cols_nove[i]:
+                st.image(get_zagor_url(br), caption=f"Naslovnica #{br}")
+                if st.session_state.album[br] > 1:
+                    st.info(f"Duplikat (x{st.session_state.album[br]})")
+                else:
+                    st.success("NOVA!")
+        st.balloons()
+    else:
+        st.error("Nemaš više paketića! Pričekaj da stignu novi.")
+
+# --- 8. PRIKAZ ALBUMA ---
+st.divider()
+st.header("📖 Pregled Albuma")
+raspon = st.select_slider("Stranica:", options=[f"{i}-{min(i+19, UKUPNO_SLICICA)}" for i in range(1, UKUPNO_SLICICA, 20)])
+start_br, end_br = map(int, raspon.split("-"))
+
+cols_album = st.columns(5)
+for i in range(start_br, end_br + 1):
+    stupac = (i - start_br) % 5
+    with cols_album[stupac]:
+        if i in st.session_state.album:
+            st.image(get_zagor_url(i), caption=f"#{i} (x{st.session_state.album[i]})")
+        else:
+            # Prikaz sive sličice ako nedostaje
+            st.image(f"https://placehold.co/200x300/333333/666666?text={i}", caption=f"Fali #{i}")
+
+# --- FUTER ---
+st.caption("Zagor Digitalni Album | Slike se povlače sa stripovi.com")
