@@ -5,7 +5,7 @@ import base64
 import json
 from datetime import datetime
 
-# --- 1. KONFIGURACIJA I POZADINA ---
+# --- 1. KONFIGURACIJA I STIL ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
 def get_base64(file_path):
@@ -14,16 +14,17 @@ def get_base64(file_path):
             return base64.b64encode(f.read()).decode()
     return None
 
-# FIKSNA TAMNA POZADINA
+# TAMNA POZADINA (Samo pozadina, bez diranja elemenata na vrhu)
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
 <style>
     .stApp {{
-        background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/jpeg;base64,{bg_data}");
-        background-size: cover; background-attachment: fixed;
+        background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url("data:image/jpeg;base64,{bg_data}");
+        background-size: cover;
+        background-attachment: fixed;
     }}
-    /* Osiguranje da je sav tekst bijel */
-    .stMarkdown, p, h3, span {{ color: white !important; font-weight: bold; }}
+    /* Forsiranje vidljivosti teksta u info kutijama */
+    .stAlert p {{ color: white !important; font-size: 20px !important; font-weight: bold !important; }}
 </style>
 ''', unsafe_allow_html=True)
 
@@ -46,24 +47,27 @@ def spremi_u_bazu(baza_data):
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK I FILTRIRANJE ---
+# --- 3. KORISNIK ---
 st.title("🛡️ Zagor Digitalni Album")
-ja = st.text_input("👤 Unesi ime:", value="Gost").strip()
+ja = st.text_input("👤 Prijavi se:", value="Gost").strip()
 
 if ja not in baza:
     baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": []}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-# Trajni fix za 413: čisti duplikate čim se zalijepe
-moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
 
-# --- 4. KOMBINIRANI BROJČANIK I GUMB ---
-# Spuštamo niže i stavljamo sve u jedan red da ne bježi s ekrana
-st.write("---")
-labela_gumba = f"📦 OTVORI PAKETIĆ (Imaš: {moj_data['paketi']}) | Zalijepljeno: {len(moj_data['album'])}/458"
+# --- 4. NOVI BROJČANICI (NEUNIŠTIVA VERZIJA) ---
+# Umjesto metricsa, koristimo st.info koji Streamlit uvijek iscrtava preko svega
+st.write("### 📊 Tvoj napredak")
+c1, c2 = st.columns(2)
+with c1:
+    st.info(f"📖 Zalijepljeno: {len(moj_data['album'])}/458")
+with c2:
+    st.info(f"📦 Paketići: {moj_data['paketi']}")
 
-if st.button(labela_gumba, use_container_width=True):
+# Gumb za paket sada ima samo jasnu akciju
+if st.button("🎁 OTVORI NOVI PAKETIĆ", use_container_width=True):
     if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
         moj_data["paketi"] -= 1
         moj_data["u_ruci"] = random.sample(range(1, 459), 5)
@@ -72,13 +76,14 @@ if st.button(labela_gumba, use_container_width=True):
 
 # --- 5. LIJEPLJENJE ---
 if moj_data.get("u_ruci"):
+    st.write("---")
     cols = st.columns(5)
     for i, br in enumerate(list(moj_data["u_ruci"])):
         with cols[i]:
             st.image(get_file_path(br), use_container_width=True)
-            if st.button(f"Zalijepi #{br}", key=f"btn_{br}_{i}"):
+            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}"):
                 if br in moj_data["album"]:
-                    moj_data["duplikati"].append(br)
+                    if br not in moj_data["duplikati"]: moj_data["duplikati"].append(br)
                 else:
                     moj_data["album"].append(br)
                 moj_data["u_ruci"].remove(br)
@@ -87,31 +92,36 @@ if moj_data.get("u_ruci"):
 
 st.divider()
 
-# --- 6. TRŽNICA ---
-tab1, tab2 = st.tabs(["🔄 Razmjena", "📩 Ponude"])
-with tab1:
+# --- 6. TRŽNICA (BEZ 413) ---
+# Čišćenje duplikata automatski
+moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
+
+t1, t2 = st.tabs(["🔄 Tržnica", "📩 Sandučić"])
+with t1:
     for k in [kor for kor in baza.keys() if kor != ja]:
         njegovi = set(baza[k].get("duplikati", []))
-        interes = njegovi.intersection(set(range(1, 459)) - set(moj_data["album"]))
+        fale_meni = set(range(1, 459)) - set(moj_data["album"])
+        interes = njegovi.intersection(fale_meni)
         if interes:
-            st.info(f"💡 {k} nudi: `{list(interes)}`")
-            d = st.multiselect(f"Što daješ {k}-u?", moj_data["duplikati"], key=f"d_{k}")
-            t = st.multiselect(f"Što uzimaš?", list(interes), key=f"u_{k}")
-            if st.button(f"Pošalji - {k}", key=f"send_{k}"):
+            st.write(f"💡 **{k}** nudi: `{list(interes)}`")
+            d = st.multiselect(f"Tvoji duplikati za {k}:", moj_data["duplikati"], key=f"d_{k}")
+            t = st.multiselect(f"Što uzimaš od {k}?", list(interes), key=f"u_{k}")
+            if st.button(f"Pošalji ponudu {k}", key=f"b_{k}"):
                 if d and t:
                     baza[k]["ponude"].append({"od": ja, "nudi": d, "trazi": t})
                     spremi_u_bazu(baza)
-                    st.success("Poslano!")
+                    st.success("Ponuda poslana!")
 
-with tab2:
+with t2:
     for idx, p in enumerate(list(moj_data.get("ponude", []))):
-        st.warning(f"📩 **{p['od']}** nudi {p['nudi']} za tvoje {p['trazi']}")
+        st.warning(f"**{p['od']}** nudi {p['nudi']} za {p['trazi']}")
         if st.button("✅ Prihvati", key=f"acc_{idx}"):
+            partner = p['od']
             for s in p["nudi"]:
                 if s not in moj_data["album"]: moj_data["album"].append(s)
-                if s in baza[p['od']]["duplikati"]: baza[p['od']]["duplikati"].remove(s)
+                if s in baza[partner]["duplikati"]: baza[partner]["duplikati"].remove(s)
             for s in p["trazi"]:
-                if s not in baza[p['od']]["album"]: baza[p['od']]["album"].append(s)
+                if s not in baza[partner]["album"]: baza[partner]["album"].append(s)
                 if s in moj_data["duplikati"]: moj_data["duplikati"].remove(s)
             moj_data["ponude"].pop(idx)
             spremi_u_bazu(baza)
@@ -119,23 +129,23 @@ with tab2:
 
 st.divider()
 
-# --- 7. ALBUM (FIX ZA REZANJE I POZADINU) ---
-st.subheader("📖 Tvoj Album")
+# --- 7. ALBUM (BEZ REZANJA) ---
+st.subheader("📖 Pregled Albuma")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
-izabrano = st.select_slider("Stranica:", options=opcije)
+izabrano = st.select_slider("Odaberi stranicu:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
-# Smanjena širina na 135px i dodan background unutar grida za bolji kontrast
-grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 15px; justify-items:center; background: rgba(0,0,0,0.6); padding: 20px; border-radius: 10px;">'
+grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 15px; justify-items:center; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 10px;">'
 for i in range(start, end + 1):
     if i in moj_data["album"]:
         img_b64 = get_base64(get_file_path(i))
-        content = f'<img src="data:image/jpeg;base64,{img_b64}" style="width:135px; border-radius:5px; border: 2px solid #ff4b4b;">'
+        content = f'<img src="data:image/jpeg;base64,{img_b64}" style="width:130px; border: 2px solid #ff4b4b; border-radius: 5px;">'
     else:
-        content = f'<div style="width:135px; height:185px; background:rgba(255,255,255,0.05); border:1px solid #444; border-radius:5px; display:flex; align-items:center; justify-content:center; color:#555; font-size:20px;">#{i}</div>'
-    grid_html += f'<div>{content}<div style="color:white; text-align:center; margin-top:5px; font-size:12px;">Br. {i}</div></div>'
+        content = f'<div style="width:130px; height:180px; background:rgba(255,255,255,0.05); border:1px solid #444; border-radius: 5px; display:flex; align-items:center; justify-content:center; color:#555;">#{i}</div>'
+    # Smanjen margin-bottom da brojevi ne budu odrezani
+    grid_html += f'<div>{content}<div style="color:white; text-align:center; font-size:12px; padding: 5px 0;">Br. {i}</div></div>'
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-# Visina na 650px + scrolling=True sprječava rezanje brojeva u zadnjem redu
-components.html(grid_html, height=650, scrolling=True)
+# scrolling=True je obavezan da se vidi zadnji red
+components.html(grid_html, height=700, scrolling=True)
