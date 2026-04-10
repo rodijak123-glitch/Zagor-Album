@@ -24,7 +24,7 @@ st.markdown(f'''
     .metric-box {{
         background: rgba(255, 75, 75, 0.3);
         padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
-        text-align: center; margin-bottom: 10px; min-height: 80px;
+        text-align: center; margin-bottom: 10px; min-height: 100px;
     }}
 </style>
 ''', unsafe_allow_html=True)
@@ -59,7 +59,7 @@ for k in ["album", "duplikati", "ponude", "u_ruci"]:
 if "zadnji_gratis" not in moj_data:
     moj_data["zadnji_gratis"] = str(datetime.now() - timedelta(minutes=30))
 
-# --- 4. BROJČANICI I FIX ZA TIMER ---
+# --- 4. BROJČANICI I FIX ZA LIVE TIMER ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -72,25 +72,28 @@ with col3:
     sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
-        # JS Timer ubačen direktno u metric-box stil (Sada s vidljivim ID-om)
+        # ISPRAVAK: JS sada precizno cilja 'countdown' i ispisuje brojke
         st.markdown(f"""
             <div class="metric-box" style="background: rgba(0,0,0,0.6); border-color: #ff4b4b;">
                 ⌛ Novi paketi za:<br>
-                <span id="countdown" style="font-size:30px; font-weight:bold; color: #ff4b4b;">--:--</span>
+                <span id="countdown" style="font-size:35px; font-weight:bold; color: #ff4b4b;"></span>
             </div>
             <script>
                 var seconds = {sekundi_ostalo};
-                var timer = setInterval(function() {{
-                    var m = Math.floor(seconds / 60);
-                    var s = seconds % 60;
-                    document.getElementById("countdown").innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-                    if (seconds <= 0) {{
-                        clearInterval(timer);
-                        window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
-                        setTimeout(function() {{ window.location.reload(); }}, 500);
-                    }}
-                    seconds--;
-                }}, 1000);
+                function startTimer() {{
+                    var display = document.getElementById("countdown");
+                    var timer = setInterval(function() {{
+                        var m = Math.floor(seconds / 60);
+                        var s = seconds % 60;
+                        display.innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                        if (seconds <= 0) {{
+                            clearInterval(timer);
+                            window.location.reload();
+                        }}
+                        seconds--;
+                    }}, 1000);
+                }}
+                startTimer();
             </script>
         """, unsafe_allow_html=True)
     else:
@@ -107,7 +110,7 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE I TRŽNICA (Ostaje nepromijenjeno) ---
+# --- 5. LIJEPLJENJE I TRŽNICA (Ostaje original) ---
 if moj_data["u_ruci"]:
     st.write("---")
     cols = st.columns(5)
@@ -121,7 +124,7 @@ if moj_data["u_ruci"]:
                 spremi_u_bazu(baza)
                 st.rerun()
 
-# --- 6. ALBUM GRID (Smanjen height na 1050px za bolji fit) ---
+# --- 6. ALBUM GRID (Vraćanje visine na 1200px - "zlatna sredina") ---
 st.divider()
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
@@ -139,5 +142,5 @@ for i in range(start, end + 1):
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-# Postavljeno na 1050px kako bi se eliminirao prazan prostor uz zadržavanje punog prikaza
-components.html(grid_html, height=1050)
+# Vraćeno na 1200px kako bi se izbjeglo rezanje i omogućio puni prikaz albuma
+components.html(grid_html, height=1200)
