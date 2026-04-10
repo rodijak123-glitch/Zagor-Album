@@ -4,7 +4,6 @@ import os
 import base64
 import json
 from datetime import datetime, timedelta
-import time
 
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
@@ -46,15 +45,16 @@ def spremi_u_bazu(baza_data):
     with open(DB_FILE, "w") as f: json.dump(baza_data, f)
 
 baza = ucitaj_bazu()
-
 ja = st.text_input("Tvoje ime:", value="Nike").strip()
 if ja not in baza:
-    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
+    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
+if "zadnji_gratis" not in moj_data:
+    moj_data["zadnji_gratis"] = str(datetime.now() - timedelta(minutes=30))
 
-# --- 4. BROJČANICI I TIMER ---
+# --- 4. BROJČANICI I ŽIVI TIMER (HTML KOMPONENTA) ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -67,19 +67,25 @@ with col3:
     sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
-        m, s = divmod(sekundi_ostalo, 60)
-        # Koristimo običan Streamlit prikaz koji je 100% pouzdan
-        st.markdown(f'''
-            <div class="metric-box" style="background: rgba(0,0,0,0.6); border-color: #ff4b4b;">
-                ⌛ Novi paketi za:<br>
-                <span style="font-size:35px; font-weight:bold; color: #ff4b4b;">{m:02d}:{s:02d}</span>
-            </div>
-        ''', unsafe_allow_html=True)
-        # Trik: Automatski refresh stranice svakih 30 sekundi da se timer ažurira, 
-        # ili jednostavno pusti korisnika da klikne bilo što. 
-        # Za pravi "live" osjećaj bez rušenja, dodajemo ovaj mali auto-refresh:
-        time.sleep(1)
-        st.rerun()
+        import streamlit.components.v1 as components
+        timer_html = f'''
+        <div style="background: rgba(255, 75, 75, 0.3); padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b; text-align: center; color: white; font-family: sans-serif;">
+            <div style="font-size: 16px; margin-bottom: 5px;">⌛ Novi paketi za:</div>
+            <div id="cnt" style="font-size: 30px; font-weight: bold;">--:--</div>
+        </div>
+        <script>
+            var sec = {sekundi_ostalo};
+            function up() {{
+                var m = Math.floor(sec / 60);
+                var s = sec % 60;
+                document.getElementById("cnt").innerHTML = (m<10?"0":"")+m + ":" + (s<10?"0":"")+s;
+                if (sec <= 0) {{ window.parent.location.reload(); }}
+                else {{ sec--; setTimeout(up, 1000); }}
+            }}
+            up();
+        </script>
+        '''
+        components.html(timer_html, height=120)
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
@@ -94,7 +100,7 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. OSTATAK KODA (NEPROMIJENJEN) ---
+# --- 5. LIJEPLJENJE I TRŽNICA (VRAĆENO) ---
 if moj_data.get("u_ruci"):
     st.write("---")
     cols = st.columns(5)
@@ -108,6 +114,44 @@ if moj_data.get("u_ruci"):
                 spremi_u_bazu(baza)
                 st.rerun()
 
+st.divider()
+
+# TRŽNICA
+t1, t2 = st.tabs(["Dostupne razmjene", "Sandučić"])
+with t1:
+    ostali = [k for k in baza.keys() if k != ja]
+    for k in ostali:
+        njegovi_dupli = set(baza[k].get("duplikati", []))
+        fale_meni = set(range(1, 459)) - set(moj_data["album"])
+        interes = njegovi_dupli.intersection(fale_meni)
+        if interes:
+            st.info(f"💡 **{k}** ima: `{list(interes)}`")
+            dajem = st.multiselect(f"Što nudiš {k}?", moj_data["duplikati"], key=f"d_{k}")
+            trazim = st.multiselect(f"Što želiš?", list(interes), key=f"u_{k}")
+            if st.button(f"Pošalji ponudu - {k}", key=f"b_{k}"):
+                if dajem and trazim:
+                    if "ponude" not in baza[k]: baza[k]["ponude"] = []
+                    baza[k]["ponude"].append({"od": ja, "nudi": dajem, "trazi": trazim})
+                    spremi_u_bazu(baza)
+                    st.success("Ponuda poslana!")
+
+with t2:
+    if not moj_data.get("ponude"): st.write("Nemaš novih ponuda.")
+    else:
+        for idx, p in enumerate(list(moj_data["ponude"])):
+            st.warning(f"📩 **{p['od']}** nudi {p['nudi']} za {p['trazi']}")
+            if st.button("✅ Prihvati", key=f"acc_{idx}"):
+                partner = p['od']
+                for s in p["nudi"]:
+                    if s not in moj_data["album"]: moj_data["album"].append(s)
+                for s in p["trazi"]:
+                    if s not in baza[partner]["album"]: baza[partner]["album"].append(s)
+                    if s in moj_data["duplikati"]: moj_data["duplikati"].remove(s)
+                moj_data["ponude"].pop(idx)
+                spremi_u_bazu(baza)
+                st.rerun()
+
+# --- 6. ALBUM GRID (VISINA 1200 - BEZ REZANJA) ---
 st.divider()
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
