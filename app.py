@@ -14,7 +14,6 @@ def get_base64(file_path):
             return base64.b64encode(f.read()).decode()
     return None
 
-# POZADINA I STIL
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
 <style>
@@ -43,7 +42,6 @@ def ucitaj_bazu():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f: return json.load(f)
     return {}
-
 def spremi_u_bazu(baza_data):
     with open(DB_FILE, "w") as f: json.dump(baza_data, f)
 
@@ -51,7 +49,6 @@ baza = ucitaj_bazu()
 
 # --- 3. KORISNIK ---
 ja = st.text_input("Tvoje ime:", value="Gost").strip()
-
 if ja not in baza:
     baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
     spremi_u_bazu(baza)
@@ -64,7 +61,7 @@ if "zadnji_gratis" not in moj_data:
 
 moj_data["duplikati"] = [d for d in moj_data["duplikati"] if d not in moj_data["album"]]
 
-# --- 4. BROJČANICI I IZMJENA 1 (TIMER) ---
+# --- 4. BROJČANICI I ŽIVI TIMER (JS trik) ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -74,12 +71,27 @@ with col2:
 with col3:
     sad = datetime.now()
     zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
-    razlika = sad - zadnje
-    sekundi_ostalo = int(max(0, 1800 - razlika.total_seconds()))
+    sekundi_proslo = (sad - zadnje).total_seconds()
+    sekundi_ostalo = int(max(0, 1800 - sekundi_proslo))
 
     if sekundi_ostalo > 0:
-        m, s = divmod(sekundi_ostalo, 60)
-        st.button(f"⏳ Novi paketi za {m:02d}:{s:02d}", disabled=True, use_container_width=True)
+        # Prikazujemo gumb koji samo vizualno odbrojava (JavaScript)
+        st.markdown(f"""
+            <div id="timer-box" class="metric-box" style="background: rgba(0,0,0,0.5); border-color: #555;">
+                ⏳ Novi paketi za: <span id="countdown" style="font-size:25px; font-weight:bold;"></span>
+            </div>
+            <script>
+                var seconds = {sekundi_ostalo};
+                function updateTimer() {{
+                    var m = Math.floor(seconds / 60);
+                    var s = seconds % 60;
+                    document.getElementById("countdown").innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    if (seconds > 0) {{ seconds--; setTimeout(updateTimer, 1000); }}
+                    else {{ window.location.reload(); }}
+                }}
+                updateTimer();
+            </script>
+        """, unsafe_allow_html=True)
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
@@ -112,7 +124,7 @@ if moj_data["u_ruci"]:
 
 st.divider()
 
-# --- 6. TRŽNICA (VRAĆENA) ---
+# --- 6. TRŽNICA ---
 t1, t2 = st.tabs(["Dostupne razmjene", "Sandučić"])
 with t1:
     ostali = [k for k in baza.keys() if k != ja]
@@ -148,7 +160,7 @@ with t2:
 
 st.divider()
 
-# --- 7. ALBUM GRID I IZMJENA 2 (VISINA 1180) ---
+# --- 7. ALBUM GRID (Smanjen height na 1100px) ---
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
 izabrano = st.select_slider("Stranica:", options=opcije)
@@ -165,4 +177,5 @@ for i in range(start, end + 1):
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-components.html(grid_html, height=1180)
+# 1100px bi trebalo biti taman da se makne taj zadnji prazni prostor
+components.html(grid_html, height=1100)
