@@ -3,7 +3,7 @@ import random
 import os
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
@@ -14,7 +14,7 @@ def get_base64(file_path):
             return base64.b64encode(f.read()).decode()
     return None
 
-# POZADINA I STIL (Bez suvišnih parametara)
+# POZADINA I STIL
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
 <style>
@@ -49,34 +49,48 @@ def spremi_u_bazu(baza_data):
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK I TOTALNO ČIŠĆENJE 413 ---
+# --- 3. KORISNIK ---
 ja = st.text_input("Tvoje ime:", value="Gost").strip()
 
 if ja not in baza:
-    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": []}
+    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-
-# OSIGURANJE KLJUČEVA
 for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
+if "zadnji_gratis" not in moj_data:
+    moj_data["zadnji_gratis"] = str(datetime.now() - timedelta(minutes=30))
 
-# KLJUČNI POPRAVAK: Ako je sličica u albumu, NE SMIJE biti u duplikatima
 moj_data["duplikati"] = [d for d in moj_data["duplikati"] if d not in moj_data["album"]]
 
-# --- 4. BROJČANICI (HTML FIX) ---
+# --- 4. BROJČANICI I IZMJENA 1 (TIMER) ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
 with col2:
     st.markdown(f'<div class="metric-box">📦 Paketići<br><span style="font-size:30px; font-weight:bold;">{moj_data["paketi"]}</span></div>', unsafe_allow_html=True)
+
 with col3:
-    # POPRAVAK LINIJE 75: Maknut parametar height=70 koji je uzrokovao TypeError
+    sad = datetime.now()
+    zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
+    razlika = sad - zadnje
+    sekundi_ostalo = int(max(0, 1800 - razlika.total_seconds()))
+
+    if sekundi_ostalo > 0:
+        m, s = divmod(sekundi_ostalo, 60)
+        st.button(f"⏳ Novi paketi za {m:02d}:{s:02d}", disabled=True, use_container_width=True)
+    else:
+        if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
+            moj_data["paketi"] += 2
+            moj_data["zadnji_gratis"] = str(datetime.now())
+            spremi_u_bazu(baza)
+            st.rerun()
+
     if st.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
         if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
             moj_data["paketi"] -= 1
-            moj_data["u_ruci"] = random.sample(range(1, 458), 5)
+            moj_data["u_ruci"] = random.sample(range(1, 459), 5)
             spremi_u_bazu(baza)
             st.rerun()
 
@@ -98,7 +112,7 @@ if moj_data["u_ruci"]:
 
 st.divider()
 
-# --- 6. TRŽNICA ---
+# --- 6. TRŽNICA (VRAĆENA) ---
 t1, t2 = st.tabs(["Dostupne razmjene", "Sandučić"])
 with t1:
     ostali = [k for k in baza.keys() if k != ja]
@@ -134,13 +148,13 @@ with t2:
 
 st.divider()
 
-# --- 7. ALBUM GRID ---
+# --- 7. ALBUM GRID I IZMJENA 2 (VISINA 1180) ---
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
 izabrano = st.select_slider("Stranica:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
-grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 20px; justify-items:center; padding-bottom: 100px;">'
+grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 20px; justify-items:center;">'
 for i in range(start, end + 1):
     if i in moj_data["album"]:
         img_b64 = get_base64(get_file_path(i))
@@ -151,4 +165,4 @@ for i in range(start, end + 1):
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-components.html(grid_html, height=1300)
+components.html(grid_html, height=1180)
