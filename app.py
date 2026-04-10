@@ -3,9 +3,9 @@ import random
 import os
 import base64
 
-st.set_page_config(page_title="Zagor: Kolekcionar", layout="wide")
+# --- 1. POSTAVKE I KONVERZIJA ---
+st.set_page_config(page_title="Zagor Album", layout="wide")
 
-# --- 1. POMOĆNE FUNKCIJE ---
 def get_base64(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -19,12 +19,12 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 2. STANJE ---
+# --- 2. STANJE APLIKACIJE ---
 if 'album' not in st.session_state: st.session_state.album = {}
 if 'na_cekanju' not in st.session_state: st.session_state.na_cekanju = []
 if 'paketi' not in st.session_state: st.session_state.paketi = 10
 
-# --- 3. CSS ZA FIKSNE RAZMAKE I POVEĆANE OKVIRE ---
+# --- 3. CSS ZA TOTALNU KONTROLU (Okviri +20% i razmak 1cm) ---
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
     <style>
@@ -34,31 +34,32 @@ st.markdown(f'''
     }}
     [data-testid="stSidebar"] {{ display: none; }}
     .block-container {{ padding: 10px !important; }}
-    
-    /* MREŽA KOJA DOZVOLJAVA SAMO 1CM RAZMAKA */
+
+    /* FIKSNA MREŽA - Razmak između redova točno 1cm (cca 38px) */
     .album-grid {{
         display: grid;
         grid-template-columns: repeat(5, 1fr);
         column-gap: 15px;
-        row-gap: 25px; /* Strogo fiksiran vertikalni razmak */
-        margin-top: 10px;
+        row-gap: 38px; 
+        margin-top: 5px;
     }}
     
     .slot {{
         text-align: center;
-        width: 150px; /* Okvir +20% */
+        width: 150px; /* Povećano 20% */
         margin: auto;
     }}
     
     .okvir {{
-        width: 150px;
-        height: 200px;
+        width: 150px; /* 120px + 20% */
+        height: 200px; /* 160px + 20% */
         background: rgba(0,0,0,0.7);
         border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #888;
+        color: #ccc;
+        font-size: 14px;
         border: 2px solid rgba(255,255,255,0.1);
     }}
     
@@ -73,16 +74,16 @@ st.markdown(f'''
     .broj {{ 
         font-size: 13px; 
         font-weight: bold; 
-        color: #111;
-        margin-top: 2px;
+        color: #000;
+        margin-top: 4px;
     }}
     </style>
 ''', unsafe_allow_html=True)
 
-# --- 4. TOP UI ---
+# --- 4. GORNJI DIO (Metric i Paketić) ---
 st.markdown("<h2 style='text-align: center; color: #8B0000; margin: 0;'>Zagor: Digitalni Album</h2>", unsafe_allow_html=True)
 
-c1, c2, c3 = st.columns([1, 1, 1.5])
+c1, c2, c3 = st.columns([1, 1, 1.2])
 c1.metric("Zalijepljeno", f"{len(st.session_state.album)}/458")
 c2.metric("Paketići", st.session_state.paketi)
 if c3.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
@@ -91,30 +92,29 @@ if c3.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
         st.session_state.na_cekanju.extend([random.randint(1, 458) for _ in range(5)])
         st.rerun()
 
-# --- 5. LIJEPLJENJE ---
+# --- 5. LIJEPLJENJE (Isto HTML radi oštrine) ---
 if st.session_state.na_cekanju:
-    st.write("---")
-    st.write("### 📥 Sličice u ruci:")
-    cols = st.columns(5)
+    st.write("### 📥 U ruci:")
+    ruka_cols = st.columns(5)
     for i, br in enumerate(st.session_state.na_cekanju[:5]):
-        with cols[i]:
+        with ruka_cols[i]:
             path = get_file_path(br)
             img_b64 = get_base64(path)
             if img_b64:
                 st.markdown(f'<img src="data:image/jpeg;base64,{img_b64}" width="110">', unsafe_allow_html=True)
-            if st.button(f"Zalijepi {br}", key=f"btn_{i}"):
+            if st.button(f"Zalijepi #{br}", key=f"r_{i}"):
                 st.session_state.album[br] = True
                 st.session_state.na_cekanju.pop(i)
                 st.rerun()
 
 st.divider()
 
-# --- 6. NAVIGACIJA I MREŽA ---
-options = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
-izabrano = st.select_slider("Izaberi stranicu:", options=options)
+# --- 6. NAVIGACIJA I ALBUM GRID ---
+opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
+izabrano = st.select_slider("Stranica:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
-# Generiranje HTML-a prema tvojoj strukturi
+# Generiranje albuma koristeći tvoju strukturu
 grid_html = '<div class="album-grid">'
 for i in range(start, end + 1):
     if i in st.session_state.album:
