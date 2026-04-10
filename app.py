@@ -19,66 +19,101 @@ SLICICA_U_PAKETU = 4
 POCETNI_PAKETI = 5
 PAKETI_REFILL_KOMADA = 2
 REFILL_INTERVAL_MINUTA = 30
-BASE_IMAGE_URL = "https://www.stripovi.com/covers/" # Osnovni URL za Ludens izdanja
+BASE_IMAGE_URL = "https://www.stripovi.com/covers/" 
 
-# --- FUNKCIJE ---
+# --- INICIJALIZACIJA STANJA ---
+if 'album' not in st.session_state:
+    st.session_state.album = {}  
+    st.session_state.paketi_na_raspolaganju = POCETNI_PAKETI
+    st.session_state.zadnji_refill = datetime.now()
+    st.session_state.prikazi_balloons = False
 
-# Funkcija za generiranje linka slike sa stripovi.com (Ludens Zagor_LEX)
 def get_zagor_image_url(broj):
-    # Formatira broj u 3 znamenke (npr. 1 -> 001, 23 -> 023)
     broj_str = str(broj).zfill(3)
-    # Sklapa puni URL: Zagor_LEX_001.jpg
-    puni_url = f"{BASE_IMAGE_URL}Zagor_LEX_{broj_str}.jpg"
-    return puni_url
+    return f"{BASE_IMAGE_URL}Zagor_LEX_{broj_str}.jpg"
 
-# Inicijalizacija stanja aplikacije (Session State)
-def inicijaliziraj_stanje():
-    if 'album' not in st.session_state:
-        st.session_state.album = {}  # Format: {broj_slicice: kolicina}
-        st.session_state.paketi_na_raspolaganju = POCETNI_PAKETI
-        st.session_state.zadnji_refill = datetime.now()
-        st.session_state.prikazi_balloons = False
-
-# Logika za dodavanje novih paketića svakih 30 minuta
 def provjeri_i_dodaj_pakete():
     trenutno_vrijeme = datetime.now()
     prolo_vremena = trenutno_vrijeme - st.session_state.zadnji_refill
-    
-    # Izračun koliko je intervala od 30 min prošlo
     broj_intervala = int(prolo_vremena.total_seconds() // (REFILL_INTERVAL_MINUTA * 60))
-    
     if broj_intervala > 0:
-        dodatni_paketi = broj_intervala * PAKETI_REFILL_KOMADA
-        st.session_state.paketi_na_raspolaganju += dodatni_paketi
-        # Postavlja zadnji refill na točno vrijeme zadnjeg procesiranog intervala
+        st.session_state.paketi_na_raspolaganju += (broj_intervala * PAKETI_REFILL_KOMADA)
         st.session_state.zadnji_refill += timedelta(minutes=broj_intervala * REFILL_INTERVAL_MINUTA)
-        return True
-    return False
 
-# --- POKRETANJE INICIJALIZACIJE ---
-inicijaliziraj_stanje()
-novi_paketi_dodani = provjeri_i_dodaj_pakete()
+provjeri_i_dodaj_pakete()
 
-# --- CSS STILIZACIJA (Za ljepši izgled) ---
+# --- CSS STILIZACIJA (PAZI NA NAVODNIKE OVDJE) ---
 st.markdown("""
     <style>
-    /* Stil za glavnu naslovnu sliku */
-    .naslovna-slika {
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-        margin-bottom: 20px;
-    }
-    /* Stil za gumb za otvaranje paketića */
     .stButton>button {
         width: 100%;
         border-radius: 25px;
         height: 3.5em;
-        background-color: #e63946; /* Crvena boja Zagorovog znaka */
+        background-color: #e63946;
         color: white;
         font-weight: bold;
         font-size: 1.2rem;
-        border: none;
-        transition: all 0.3s ease;
     }
-    .stButton>button:hover {
-        background-
+    .slicica-container {
+        border-radius: 10px;
+        padding: 5px;
+        text-align: center;
+        background-color: #f1faee;
+        margin-bottom: 15px;
+    }
+    .slicica-duplikat {
+        color: #e63946;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- UI - NASLOV ---
+if os.path.exists('zagor_chico.jpg'):
+    image_header = Image.open('zagor_chico.jpg')
+    st.image(image_header, use_container_width=True)
+else:
+    st.title("🪓 Zagor Te-Nay: Digitalni Kolekcionar")
+
+st.markdown("<h1 style='text-align: center; color: #e63946;'>Digitalni Album Naslovnica</h1>", unsafe_allow_html=True)
+
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("👤 Tvoja Kolekcija")
+    broj_sakupljenih = len(st.session_state.album)
+    procent = (broj_sakupljenih / UKUPNO_SLICICA) * 100
+    st.metric("Sakupljeno", f"{broj_sakupljenih} / {UKUPNO_SLICICA}", f"{procent:.1f}%")
+    st.divider()
+    st.metric("Paketići", st.session_state.paketi_na_raspolaganju)
+
+# --- OTVARANJE PAKETIĆA ---
+if st.button("OTVORI PAKETIĆ 💥"):
+    if st.session_state.paketi_na_raspolaganju > 0:
+        st.session_state.paketi_na_raspolaganju -= 1
+        nove = [random.randint(1, UKUPNO_SLICICA) for _ in range(SLICICA_U_PAKETU)]
+        
+        st.subheader("Dobio si:")
+        cols = st.columns(4)
+        for i, br in enumerate(nove):
+            st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
+            with cols[i]:
+                st.image(get_zagor_image_url(br), caption=f"#{br}")
+                if st.session_state.album[br] > 1:
+                    st.write("DUPLIKAT")
+        st.balloons()
+    else:
+        st.error("Nemaš više paketića!")
+
+# --- PRIKAZ ALBUMA ---
+st.divider()
+stranice = [f"{i}-{min(i+19, UKUPNO_SLICICA)}" for i in range(1, UKUPNO_SLICICA, 20)]
+izabrana = st.select_slider("Stranica:", options=stranice)
+start_br, end_br = map(int, izabrana.split("-"))
+
+cols_album = st.columns(5)
+for i in range(start_br, end_br + 1):
+    with cols_album[(i - start_br) % 5]:
+        if i in st.session_state.album:
+            st.image(get_zagor_image_url(i), caption=f"#{i} (x{st.session_state.album[i]})")
+        else:
+            st.image(f"https://placehold.co/200x300/cccccc/999999?text={i}", caption=f"Fali #{i}")
