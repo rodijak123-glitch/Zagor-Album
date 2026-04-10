@@ -2,52 +2,50 @@ import streamlit as st
 import random
 import os
 import json
-from datetime import datetime
 
-# --- 1. ČISTA POZADINA (BEZ TIGRA) ---
+# --- 1. POSTAVKE (BEZ KOMPLICIRANOG CSS-A) ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
-# Koristimo jednostavan CSS koji samo potamnjuje pozadinu bez vanjskih linkova
-st.markdown('''
-<style>
-    .stApp { background-color: #0e1117; }
-    .stMarkdown, p, h1, h2, h3 { color: white !important; }
-    /* Fix za gumbe da budu uočljivi */
-    .stButton button { border: 2px solid #ff4b4b !important; }
-</style>
-''', unsafe_allow_html=True)
+# Samo osnovna tamna tema koja neće sakriti tekst
+st.markdown("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
 
-# --- 2. BAZA PODATAKA ---
+# --- 2. LOGIKA ZA SLIKE I BAZU ---
+def get_file_path(broj):
+    f = "slike/"
+    if broj <= 75: return f"{f}TN_ZG_EXT_{broj}.jpeg"
+    elif broj <= 385: return f"{f}TN_ZG_LEX_{broj}.jpeg"
+    elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
+    else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
+
 DB_FILE = "album_baza.json"
 def ucitaj_bazu():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f: return json.load(f)
     return {}
+
 def spremi_u_bazu(baza_data):
     with open(DB_FILE, "w") as f: json.dump(baza_data, f)
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK I FIX ZA 413 ---
+# --- 3. KORISNIK ---
 st.title("🛡️ Zagor Digitalni Album")
-ja = st.text_input("👤 Unesi ime:", value="Nike").strip()
+ja = st.text_input("👤 Prijavi se:", value="Nike").strip()
 
 if ja not in baza:
     baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "ponude": [], "u_ruci": []}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-# Trajno čišćenje duplikata koji su zalijepljeni
+
+# FIX ZA DUPLIKATE (Automatski briše zalijepljene iz ponude)
 moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
 
-# --- 4. BROJČANIK (VERZIJA KOJA SE MORA VIDJETI) ---
-st.write("---")
-# Koristimo warning i info okvire jer oni imaju fiksne boje koje pozadina ne može "pojest"
-c1, c2 = st.columns(2)
-with c1:
-    st.warning(f"📖 Zalijepljeno: {len(moj_data['album'])}/458")
-with c2:
-    st.info(f"📦 Paketići: {moj_data['paketi']}")
+# --- 4. BROJČANIK (OBIČAN TEKST KOJI SE MORA VIDJETI) ---
+st.divider()
+# Koristimo st.write umjesto subheadera jer je on najotporniji na nestajanje
+st.write(f"### 📖 Zalijepljeno: **{len(moj_data['album'])} / 458**")
+st.write(f"### 📦 Imaš paketića: **{moj_data['paketi']}**")
 
 if st.button("🎁 OTVORI NOVI PAKETIĆ", use_container_width=True):
     if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
@@ -58,16 +56,14 @@ if st.button("🎁 OTVORI NOVI PAKETIĆ", use_container_width=True):
 
 # --- 5. LIJEPLJENJE ---
 if moj_data.get("u_ruci"):
-    st.write("### 📥 Sličice u ruci:")
+    st.info("📥 Nove sličice u ruci - klikni za ljepljenje u album:")
     ruka_cols = st.columns(5)
     for i, br in enumerate(list(moj_data["u_ruci"])):
         with ruka_cols[i]:
-            # Putanja do tvojih slika
-            f = "slike/"
-            path = f"{f}TN_ZG_EXT_{br}.jpeg" if br <= 75 else f"{f}TN_ZG_LEX_{br}.jpeg" 
+            path = get_file_path(br)
             if os.path.exists(path):
                 st.image(path, use_container_width=True)
-            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}", use_container_width=True):
+            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}"):
                 if br in moj_data["album"]:
                     moj_data["duplikati"].append(br)
                 else:
@@ -78,25 +74,19 @@ if moj_data.get("u_ruci"):
 
 st.divider()
 
-# --- 6. ALBUM (SADA SIGURAN) ---
-st.subheader("📖 Pregled Albuma")
-opcije = [f"{i}-{min(i+14, 458)}" for i in range(1, 459, 15)]
-izabrano = st.select_slider("Stranica:", options=opcije)
-start, end = map(int, izabrano.split("-"))
+# --- 6. ALBUM (ČISTI PREGLED) ---
+st.subheader("📖 Pregled tvojih sličica")
+izbor = st.select_slider("Pomakni stranicu:", options=[f"{i}-{min(i+14, 458)}" for i in range(1, 459, 15)])
+start, end = map(int, izbor.split("-"))
 
 for r in range(3):
     cols = st.columns(5)
     for c in range(5):
-        idx = start + (r * 5) + c
-        if idx <= end:
+        br = start + (r * 5) + c
+        if br <= end:
             with cols[c]:
-                if idx in moj_data["album"]:
-                    # Ako je slika tu, prikaži ju
-                    path = f"slike/TN_ZG_LEX_{idx}.jpeg" # Prilagodi putanju
-                    if os.path.exists(path):
-                        st.image(path, caption=f"Br. {idx}", use_container_width=True)
-                    else:
-                        st.success(f"Zalijepljeno #{idx}")
+                if br in moj_data["album"]:
+                    st.image(get_file_path(br), caption=f"Zalijepljeno #{br}", use_container_width=True)
                 else:
-                    # Prazno mjesto je sada uočljiv crveni tekst
-                    st.error(f"❌ Fali #{idx}")
+                    # Samo jednostavna oznaka, bez HTML-a koji bi mogao 'puknuti'
+                    st.write(f"❌ **Fali #{br}**")
