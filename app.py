@@ -12,32 +12,32 @@ SLICICA_U_PAKETU = 5
 
 # --- 3. POZADINA I FIKSIRANJE DIZAJNA ---
 def apply_custom_styles(file_path):
-    # CSS za fiksiranje albuma i skrivanje Streamlit zoom gumba
-    style = f'''
-        <style>
-        .stApp {{
-            background-image: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), url("data:image/jpeg;base64,{{data}}");
-            background-size: cover; background-attachment: fixed;
-        }}
-        /* Skrivanje gumba za "otvori u novom tabu" iznad slika */
-        button[title="View fullscreen"] {{
-            display: none !important;
-        }}
-        /* FIKSNI KONTEJNER: sprečava deformaciju albuma */
-        .slicica-slot {{
-            height: 200px; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 10px;
-        }}
-        </style>
-    '''
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
             data = base64.b64encode(f.read()).decode()
-            st.markdown(style.format(data=data), unsafe_allow_html=True)
+        
+        # Koristimo f-string i dvostruke zagrade {{ }} za CSS da izbjegnemo KeyError
+        st.markdown(f'''
+            <style>
+            .stApp {{
+                background-image: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), url("data:image/jpeg;base64,{data}");
+                background-size: cover; background-attachment: fixed;
+            }}
+            /* Skrivanje gumba za "View fullscreen" */
+            button[title="View fullscreen"] {{
+                display: none !important;
+            }}
+            /* FIKSNI KONTEJNER: sprečava pomicanje albuma */
+            .slicica-slot {{
+                height: 220px; 
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 10px;
+            }}
+            </style>
+        ''', unsafe_allow_html=True)
 
 # Postavljanje pozadine
 apply_custom_styles('image_50927d.jpg')
@@ -65,7 +65,7 @@ with st.sidebar:
 # --- 7. NASLOV I OTVARANJE ---
 st.markdown("<h1 style='text-align: center; color: #8B0000;'>Zagor: Digitalni Album</h1>", unsafe_allow_html=True)
 
-c1, c2, c3 = st.columns([1, 1, 1])
+c1, c2, c3 = st.columns([1, 2, 1])
 with c2:
     if st.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
         if st.session_state.paketi > 0:
@@ -81,10 +81,10 @@ if st.session_state.na_cekanju:
         with cols_ruka[i % 5]:
             p = get_file_path(br)
             if os.path.exists(p): st.image(p, width=100)
-            if st.button(f"Zalijepi #{br}", key=f"s_{i}_{br}"):
+            if st.button(f"Zalijepi #{br}", key=f"stick_{i}_{br}"):
                 st.session_state.album[br] = st.session_state.album.get(br, 0) + 1
                 st.session_state.na_cekanju.pop(i)
-                # Automatski skok na stranicu
+                # Skok na stranicu
                 start_p = ((br - 1) // 20) * 20 + 1
                 st.session_state.pregled_raspon = f"{start_p}-{min(start_p+19, UKUPNO_SLICICA)}"
                 st.rerun()
@@ -102,18 +102,18 @@ start_br, end_br = map(int, izabrani.split("-"))
 cols_album = st.columns(5)
 for i in range(start_br, end_br + 1):
     with cols_album[(i - start_br) % 5]:
-        # Omotač koji drži fiksnu visinu (slicica-slot)
+        # Fiksni okvir koji drži visinu
         st.markdown('<div class="slicica-slot">', unsafe_allow_html=True)
         
         if i in st.session_state.album:
             putanja = get_file_path(i)
             if os.path.exists(putanja):
-                # Sličica uvećana za 20% (fiksno width=120)
+                # Povećano za 20% (width=120)
                 st.image(putanja, width=120)
             else:
                 st.write(f"Zalijepljeno #{i}")
         else:
-            # Sivi prozirni pravokutnik (isto fiksne dimenzije)
+            # Tamni prozirni stil
             st.markdown(f'''
                 <div style="height:160px; width:120px; border-radius:10px; 
                 display:flex; align-items:center; justify-content:center; 
