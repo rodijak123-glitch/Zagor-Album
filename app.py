@@ -4,6 +4,7 @@ import os
 import base64
 import json
 from datetime import datetime, timedelta
+import time
 
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
@@ -59,8 +60,6 @@ if ja not in baza:
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
-
-# OSIGURANJE KLJUČEVA
 for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 if "zadnji_gratis" not in moj_data:
@@ -68,7 +67,7 @@ if "zadnji_gratis" not in moj_data:
 
 moj_data["duplikati"] = [d for d in moj_data["duplikati"] if d not in moj_data["album"]]
 
-# --- 4. BROJČANICI I TIMER ---
+# --- 4. BROJČANICI I LIVE TIMER ---
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
@@ -78,22 +77,29 @@ with col2:
     st.markdown(f'<div class="metric-box">📦 Paketići<br><span style="font-size:30px; font-weight:bold;">{moj_data["paketi"]}</span></div>', unsafe_allow_html=True)
 
 with col3:
-    # LOGIKA TIMERA (Bez non-stop refreshanja)
-    sad = datetime.now()
-    zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
-    razlika = sad - zadnje
-    sekundi_ostalo = int(max(0, 1800 - razlika.total_seconds()))
+    timer_placeholder = st.empty() # Spremnik za timer koji se vrti
+    
+    # Logika koja se vrti dok vrijeme ne istekne
+    while True:
+        sad = datetime.now()
+        zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
+        razlika = sad - zadnje
+        sekundi_ostalo = int(max(0, 1800 - razlika.total_seconds()))
 
-    if sekundi_ostalo > 0:
-        minuta = sekundi_ostalo // 60
-        sekundi = sekundi_ostalo % 60
-        st.button(f"⏳ Novi paketi za {minuta:02d}:{sekundi:02d}", disabled=True, use_container_width=True)
-    else:
-        if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
-            moj_data["paketi"] += 2
-            moj_data["zadnji_gratis"] = str(datetime.now())
-            spremi_u_bazu(baza)
-            st.rerun()
+        if sekundi_ostalo > 0:
+            minuta = sekundi_ostalo // 60
+            sekundi = sekundi_ostalo % 60
+            timer_placeholder.button(f"⏳ Novi paketi za {minuta:02d}:{sekundi:02d}", disabled=True, use_container_width=True, key="timer_btn")
+            time.sleep(1)
+        else:
+            # Kad istekne vrijeme, makni timer i prikaži gumb za preuzimanje
+            timer_placeholder.empty()
+            if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True, key="gratis_btn"):
+                moj_data["paketi"] += 2
+                moj_data["zadnji_gratis"] = str(datetime.now())
+                spremi_u_bazu(baza)
+                st.rerun()
+            break # Izađi iz petlje kad se prikaže gumb
 
     if st.button("📦 OTVORI PAKETIĆ IZ ZALIHE", use_container_width=True):
         if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
@@ -102,7 +108,7 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE --- (Dodano da ne fali u kodu)
+# --- 5. LIJEPLJENJE ---
 if moj_data["u_ruci"]:
     st.write("---")
     cols = st.columns(5)
@@ -120,7 +126,7 @@ if moj_data["u_ruci"]:
 
 st.divider()
 
-# --- 6. ALBUM GRID (Smanjen height na 1000px) ---
+# --- 6. ALBUM GRID (Dovoljna visina da nema rezanja) ---
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
 izabrano = st.select_slider("Stranica:", options=opcije)
@@ -137,5 +143,5 @@ for i in range(start, end + 1):
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-# Visina 1000 je dovoljna za 4 reda bez rezanja okvira
-components.html(grid_html, height=1000)
+# Visina 1150px je optimalna da se vide 4 puna reda i brojevi ispod njih
+components.html(grid_html, height=1150)
