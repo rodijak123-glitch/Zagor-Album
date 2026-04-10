@@ -1,6 +1,5 @@
 import streamlit as st
 import random
-import time
 from datetime import datetime, timedelta
 import os
 import base64
@@ -16,7 +15,7 @@ REFILL_MINUTA = 30
 
 GRANICA_EXTRA_PRVI_DIO = 75
 GRANICA_EXTRA_UKUPNO = 385
-GRANICA_SPECIJALI = 431 # 385 + 46
+GRANICA_SPECIJALI = 431 
 
 # --- 3. FUNKCIJA ZA POZADINU ---
 def set_background(file_path):
@@ -28,13 +27,14 @@ def set_background(file_path):
             <style>
             .stApp {{
                 background-image: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)), url("data:image/jpeg;base64,{bin_str}");
-                background-size: cover; background-attachment: fixed;
+                background-size: cover; 
+                background-attachment: fixed;
             }}
             [data-testid="stSidebar"] {{ background-color: rgba(255, 255, 255, 0.5); }}
             </style>
             ''', unsafe_allow_html=True)
 
-# Postavi pozadinu (pazi na točan naziv datoteke na GitHubu)
+# Postavljanje tvoje slike kao pozadine
 set_background('image_50927d.jpg') 
 
 # --- 4. INICIJALIZACIJA STANJA ---
@@ -43,10 +43,9 @@ if 'album' not in st.session_state:
     st.session_state.paketi = POCETNI_PAKETI
     st.session_state.zadnji_refill = datetime.now()
 
-# --- 5. LOGIKA ZA NAZIVE DATOTEKA (.jpeg verzija) ---
+# --- 5. LOGIKA ZA NAZIVE DATOTEKA ---
 def get_file_path(broj):
     folder = "slike/"
-    # Ovdje smo promijenili nastavak u .jpeg
     if broj <= GRANICA_EXTRA_PRVI_DIO:
         return f"{folder}TN_ZG_EXT_{broj}.jpeg"
     elif broj <= GRANICA_EXTRA_UKUPNO:
@@ -80,32 +79,24 @@ def prikazi_slicicu(broj, kolicina=None, fali=False):
         if os.path.exists(path):
             st.image(path)
         else:
-            # Ako slika ne postoji, prikazuje samo crni okvir s brojem
             st.markdown(f'<div class="slicica-okvir"><div style="color:white;">#{broj}<br><small>Nema slike</small></div></div>', unsafe_allow_html=True)
         
         txt = f"#{broj}" + (f" (x{kolicina})" if kolicina and kolicina > 1 else "")
         st.caption(txt)
 
-# --- 7. SIDEBAR ---
+# --- 7. SIDEBAR (STATISTIKA) ---
 with st.sidebar:
     st.header("👤 Tvoja Kolekcija")
     sakupljeno = len(st.session_state.album)
     st.metric("Sakupljeno", f"{sakupljeno} / {UKUPNO_SLICICA}", f"{(sakupljeno/UKUPNO_SLICICA*100):.1f}%")
     st.divider()
-    st.metric("📦 Paketići", st.session_state.paketi)
+    st.metric("📦 Dostupni paketići", st.session_state.paketi)
 
-# --- 8. NASLOVNA ---
-L, C, R = st.columns([1, 2, 1])
-with C:
-    # Provjeravamo i .jpg i .jpeg verziju za naslovnicu
-    if os.path.exists('image_45b87f.jpg'):
-        st.image('image_45b87f.jpg', use_container_width=True)
-    elif os.path.exists('image_45b87f.jpeg'):
-        st.image('image_45b87f.jpeg', use_container_width=True)
-        
-st.markdown("<h1 style='text-align: center; color: #8B0000;'>Zagor: Domaći Digitalni Album</h1>", unsafe_allow_html=True)
+# --- 8. GLAVNI NASLOV ---
+st.markdown("<h1 style='text-align: center; color: #8B0000; margin-top: -50px;'>Zagor: Domaći Digitalni Album</h1>", unsafe_allow_html=True)
 
 # --- 9. OTVARANJE PAKETIĆA ---
+st.divider()
 if st.button("OTVORI PAKETIĆ 📦 (5 sličica)", use_container_width=True):
     if st.session_state.paketi > 0:
         st.session_state.paketi -= 1
