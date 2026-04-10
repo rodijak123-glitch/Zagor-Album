@@ -3,10 +3,9 @@ import random
 import os
 import base64
 
-# --- 1. POSTAVKE ---
+# --- 1. OSNOVNE POSTAVKE ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
-# Funkcija za slike (za pozadinu i albume)
 def get_base64(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -20,123 +19,81 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 2. STANJE (Logika koja mora raditi) ---
+# --- 2. STANJE ---
 if 'album' not in st.session_state: st.session_state.album = {}
 if 'na_cekanju' not in st.session_state: st.session_state.na_cekanju = []
 if 'paketi' not in st.session_state: st.session_state.paketi = 10
 
-# --- 3. CSS (Pozadina + Okviri iz image_5fb120.png) ---
+# --- 3. POZADINA I STIL ---
 bg_data = get_base64('image_50927d.jpg')
-bg_style = ""
-if bg_data:
-    bg_style = f'background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jpeg;base64,{bg_data}");'
-
 st.markdown(f'''
     <style>
     .stApp {{
-        {bg_style}
+        background-image: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url("data:image/jpeg;base64,{bg_data}");
         background-size: cover;
         background-attachment: fixed;
     }}
     [data-testid="stSidebar"] {{ display: none; }}
-    
-    .album-grid {{
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        column-gap: 20px;
-        row-gap: 30px;
-        justify-items: center;
-        margin-top: 20px;
-    }}
-    
-    .slot {{
-        width: 155px;
-        text-align: center;
-    }}
-    
-    .okvir {{
-        width: 155px;
-        height: 210px;
-        background: rgba(30, 30, 30, 0.8);
-        border: 1px solid #444;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #888;
-        font-size: 14px;
-    }}
-    
-    .zalijepljena {{
-        width: 155px;
-        height: 210px;
-        object-fit: cover;
-        border-radius: 12px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-    }}
-    
-    .broj-label {{
-        margin-top: 8px;
-        font-weight: bold;
-        color: white;
-    }}
     </style>
 ''', unsafe_allow_html=True)
 
-# --- 4. UI KONTROLE (Paketići i status) ---
+# --- 4. KONTROLE ---
 st.title("Zagor: Digitalni Album")
+c1, c2, c3 = st.columns(3)
+c1.metric("Zalijepljeno", f"{len(st.session_state.album)}/458")
+c2.metric("Paketići", st.session_state.paketi)
 
-c1, c2, c3 = st.columns([1, 1, 1])
-with c1: st.metric("Zalijepljeno", f"{len(st.session_state.album)}/458")
-with c2: st.metric("Preostalo paketića", st.session_state.paketi)
-with c3:
-    if st.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
-        if st.session_state.paketi > 0:
-            st.session_state.paketi -= 1
-            # Generiraj 5 sličica
-            nove = [random.randint(1, 458) for _ in range(5)]
-            st.session_state.na_cekanju.extend(nove)
-            st.rerun()
+if c3.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
+    if st.session_state.paketi > 0:
+        st.session_state.paketi -= 1
+        st.session_state.na_cekanju.extend([random.randint(1, 458) for _ in range(5)])
+        st.rerun()
 
-# Lijepljenje sličica koje su "u ruci"
+# --- 5. LIJEPLJENJE (GORNJI RED) ---
 if st.session_state.na_cekanju:
-    st.subheader("📥 Sličice u ruci (klikni za lijepljenje):")
-    ruka_cols = st.columns(5)
-    # Prikazujemo prvih 5 iz ruku
-    za_prikaz = st.session_state.na_cekanju[:5]
-    for idx, br in enumerate(za_prikaz):
-        with ruka_cols[idx]:
-            img_path = get_file_path(br)
-            img_b64 = get_base64(img_path)
+    st.write("### 📥 Sličice u ruci:")
+    cols = st.columns(5)
+    for i, br in enumerate(st.session_state.na_cekanju[:5]):
+        with cols[i]:
+            path = get_file_path(br)
+            img_b64 = get_base64(path)
             if img_b64:
-                st.markdown(f'<img src="data:image/jpeg;base64,{img_b64}" width="100" style="border-radius:5px">', unsafe_allow_html=True)
-            if st.button(f"Zalijepi #{br}", key=f"stick_{idx}_{br}"):
+                st.image(path, width=130)
+            if st.button(f"Zalijepi #{br}", key=f"stick_{br}_{i}"):
                 st.session_state.album[br] = True
                 st.session_state.na_cekanju.remove(br)
                 st.rerun()
 
 st.divider()
 
-# --- 5. NAVIGACIJA I MREŽA ---
+# --- 6. ALBUM GRID (Izolirani HTML) ---
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
-izabrana_str = st.select_slider("Stranica:", options=opcije)
-start, end = map(int, izabrana_str.split("-"))
+izabrano = st.select_slider("Stranica:", options=opcije)
+start, end = map(int, izabrano.split("-"))
 
-# Generiranje mreže
-html_mreza = '<div class="album-grid">'
+# Konstruiramo HTML sadržaj albuma
+grid_items = ""
 for i in range(start, end + 1):
     if i in st.session_state.album:
         img_b64 = get_base64(get_file_path(i))
-        sadrzaj = f'<img src="data:image/jpeg;base64,{img_b64}" class="zalijepljena">'
+        content = f'<img src="data:image/jpeg;base64,{img_b64}" style="width:150px; height:200px; object-fit:cover; border-radius:10px;">'
     else:
-        sadrzaj = f'<div class="okvir">Fali #{i}</div>'
+        content = f'<div style="width:150px; height:200px; background:rgba(40,40,40,0.9); border:1px solid #555; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#888;">Fali #{i}</div>'
     
-    html_mreza += f'''
-        <div class="slot">
-            {sadrzaj}
-            <div class="broj-label">Br. {i}</div>
+    grid_items += f'''
+        <div style="text-align:center;">
+            {content}
+            <div style="color:white; font-weight:bold; margin-top:8px;">Br. {i}</div>
         </div>
     '''
-html_mreza += '</div>'
 
-st.markdown(html_mreza, unsafe_allow_html=True)
+# Finalni HTML blok sa CSS gridom
+full_html = f'''
+    <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 30px; justify-items:center;">
+        {grid_items}
+    </div>
+'''
+
+# Ključni popravak: koristimo st.components.v1.html za izolaciju
+import streamlit.components.v1 as components
+components.html(full_html, height=1000, scrolling=False)
