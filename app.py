@@ -4,8 +4,9 @@ import os
 import base64
 import json
 from datetime import datetime, timedelta
+import time
 
-# --- 1. KONFIGURACIJA (Ne diramo okvire) ---
+# --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
 def get_base64(file_path):
@@ -53,7 +54,7 @@ if ja not in baza:
 
 moj_data = baza[ja]
 
-# --- 4. BROJČANICI I ROBUSTAN TIMER ---
+# --- 4. BROJČANICI I TIMER ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -66,33 +67,19 @@ with col3:
     sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
-        # Prikazujemo box, a JS će ga popuniti čim se učita
-        st.markdown(f"""
+        m, s = divmod(sekundi_ostalo, 60)
+        # Koristimo običan Streamlit prikaz koji je 100% pouzdan
+        st.markdown(f'''
             <div class="metric-box" style="background: rgba(0,0,0,0.6); border-color: #ff4b4b;">
                 ⌛ Novi paketi za:<br>
-                <span id="countdown" style="font-size:35px; font-weight:bold; color: #ff4b4b;">Učitavam...</span>
+                <span style="font-size:35px; font-weight:bold; color: #ff4b4b;">{m:02d}:{s:02d}</span>
             </div>
-            <script>
-                (function() {{
-                    var seconds = {sekundi_ostalo};
-                    function update() {{
-                        var display = document.getElementById("countdown");
-                        if (!display) return; 
-                        var m = Math.floor(seconds / 60);
-                        var s = seconds % 60;
-                        display.innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-                        if (seconds <= 0) {{ window.location.reload(); }}
-                        else {{ seconds--; setTimeout(update, 1000); }}
-                    }}
-                    // Pokreni čim je DOM spreman
-                    if (document.readyState === "complete" || document.readyState === "interactive") {{
-                        update();
-                    }} else {{
-                        window.addEventListener("DOMContentLoaded", update);
-                    }}
-                }})();
-            </script>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
+        # Trik: Automatski refresh stranice svakih 30 sekundi da se timer ažurira, 
+        # ili jednostavno pusti korisnika da klikne bilo što. 
+        # Za pravi "live" osjećaj bez rušenja, dodajemo ovaj mali auto-refresh:
+        time.sleep(1)
+        st.rerun()
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
@@ -107,7 +94,7 @@ with col3:
             spremi_u_bazu(baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE I TRŽNICA (Original) ---
+# --- 5. OSTATAK KODA (NEPROMIJENJEN) ---
 if moj_data.get("u_ruci"):
     st.write("---")
     cols = st.columns(5)
@@ -121,7 +108,6 @@ if moj_data.get("u_ruci"):
                 spremi_u_bazu(baza)
                 st.rerun()
 
-# --- 6. ALBUM GRID (Visina 1200px po dogovoru) ---
 st.divider()
 st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
