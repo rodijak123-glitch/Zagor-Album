@@ -5,7 +5,7 @@ import base64
 import json
 from datetime import datetime
 
-# --- 1. OSNOVNE POSTAVKE ---
+# --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album", layout="wide")
 
 def get_base64(file_path):
@@ -14,17 +14,14 @@ def get_base64(file_path):
             return base64.b64encode(f.read()).decode()
     return None
 
-# TAMNA POZADINA I FIKSNI STIL
+# TAMNA POZADINA
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
 <style>
     .stApp {{
-        background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url("data:image/jpeg;base64,{bg_data}");
+        background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url("data:image/jpeg;base64,{bg_data}");
         background-size: cover; background-attachment: fixed;
     }}
-    /* Onemogućavanje Streamlitovog smanjivanja elemenata */
-    .stImage img {{ min-width: 150px !important; }}
-    h2, h3 {{ color: #ff4b4b !important; text-shadow: 2px 2px #000; }}
 </style>
 ''', unsafe_allow_html=True)
 
@@ -35,7 +32,7 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 2. LOGIKA PODATAKA ---
+# --- 2. BAZA ---
 DB_FILE = "album_baza.json"
 def ucitaj_bazu():
     if os.path.exists(DB_FILE):
@@ -47,34 +44,40 @@ def spremi_u_bazu(baza_data):
 
 baza = ucitaj_bazu()
 
-# --- 3. KORISNIK I ČIŠĆENJE (413 FIX) ---
-ja = st.text_input("👤 Ime:", value="Gost").strip()
-if ja not in baza:
-    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": []}
-    spremi_u_bazu(baza)
-
-moj_data = baza[ja]
-# Prisilno brisanje svega što je već u albumu iz duplikata
-moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
-
-# --- 4. BROJČANIK U NASLOVU (OVO SE MORA VIDJETI) ---
-st.header(f"📊 Zalijepljeno: {len(moj_data['album'])}/458 | 📦 Paketići: {moj_data['paketi']}")
-
-if st.button("🎁 OTVORI NOVI PAKETIĆ", use_container_width=True):
-    if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
-        moj_data["paketi"] -= 1
-        moj_data["u_ruci"] = random.sample(range(1, 459), 5)
+# --- 3. KORISNIK I SIDEBAR (BROJČANIK) ---
+# Brojčanik selimo lijevo da bude uvijek fiksiran
+with st.sidebar:
+    st.header("📊 Stanje")
+    ja = st.text_input("👤 Ime:", value="Gost").strip()
+    
+    if ja not in baza:
+        baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "vrijeme": str(datetime.now()), "ponude": [], "u_ruci": []}
         spremi_u_bazu(baza)
-        st.rerun()
+    
+    moj_data = baza[ja]
+    # Automatski fix za 413
+    moj_data["duplikati"] = [d for d in moj_data.get("duplikati", []) if d not in moj_data.get("album", [])]
+    
+    st.metric("Zalijepljeno", f"{len(moj_data['album'])}/458")
+    st.metric("Paketići", moj_data['paketi'])
+    
+    if st.button("🎁 OTVORI PAKETIĆ", use_container_width=True):
+        if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
+            moj_data["paketi"] -= 1
+            moj_data["u_ruci"] = random.sample(range(1, 459), 5)
+            spremi_u_bazu(baza)
+            st.rerun()
 
-# --- 5. LIJEPLJENJE (VELIKE SLIKE) ---
+# --- 4. GLAVNI EKRAN: LIJEPLJENJE ---
+st.title("🛡️ Zagor Digitalni Album")
+
 if moj_data.get("u_ruci"):
     st.subheader("📥 Nove sličice:")
-    ruka_cols = st.columns(5)
+    cols = st.columns(5)
     for i, br in enumerate(list(moj_data["u_ruci"])):
-        with ruka_cols[i]:
+        with cols[i]:
             st.image(get_file_path(br), use_container_width=True)
-            if st.button(f"Zalijepi #{br}", key=f"stick_{br}_{i}"):
+            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}"):
                 if br in moj_data["album"]:
                     moj_data["duplikati"].append(br)
                 else:
@@ -85,15 +88,15 @@ if moj_data.get("u_ruci"):
 
 st.divider()
 
-# --- 6. TRŽNICA ---
-t1, t2 = st.tabs(["🔄 Tržnica", "📩 Sandučić"])
+# --- 5. TRŽNICA ---
+t1, t2 = st.tabs(["🔄 Razmjena", "📩 Sandučić"])
 with t1:
     for k in [kor for kor in baza.keys() if kor != ja]:
         njegovi = set(baza[k].get("duplikati", []))
         interes = njegovi.intersection(set(range(1, 459)) - set(moj_data["album"]))
         if interes:
             st.write(f"💡 **{k}** nudi: `{list(interes)}`")
-            d = st.multiselect(f"Što nudiš?", moj_data["duplikati"], key=f"d_{k}")
+            d = st.multiselect(f"Što daješ?", moj_data["duplikati"], key=f"d_{k}")
             t = st.multiselect(f"Što tražiš?", list(interes), key=f"u_{k}")
             if st.button(f"Pošalji - {k}", key=f"b_{k}"):
                 if d and t:
@@ -117,23 +120,24 @@ with t2:
 
 st.divider()
 
-# --- 7. ALBUM (VELIKE SLIKE I SCROLL) ---
-st.subheader("📖 Tvoj Album")
-opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
+# --- 6. ALBUM (15 SLIKA PO STRANICI - BEZ SCROLLA) ---
+st.subheader("📖 Pregled Albuma")
+# Smanjeno na 15 sličica po stranici
+broj_po_stranici = 15
+opcije = [f"{i}-{min(i+14, 458)}" for i in range(1, 459, broj_po_stranici)]
 izabrano = st.select_slider("Stranica:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
-# POVEĆANE SLIKE NA 160px I DODAN VEĆI PADDING
-grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 20px; justify-items:center; padding: 20px; padding-bottom: 60px;">'
+grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 15px; justify-items:center; padding-bottom: 30px;">'
 for i in range(start, end + 1):
     if i in moj_data["album"]:
         img_b64 = get_base64(get_file_path(i))
         content = f'<img src="data:image/jpeg;base64,{img_b64}" style="width:160px; border-radius:10px; border: 2px solid #ff4b4b;">'
     else:
         content = f'<div style="width:160px; height:220px; background:rgba(255,255,255,0.1); border:1px solid #444; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#555;">#{i}</div>'
-    grid_html += f'<div>{content}<div style="color:white; text-align:center; margin-top:10px; font-weight:bold;">Br. {i}</div></div>'
+    grid_html += f'<div>{content}<div style="color:white; text-align:center; margin-top:8px; font-weight:bold;">Br. {i}</div></div>'
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
-# Visina vraćena na 1000px uz scrolling=True da ništa ne bude odrezano
-components.html(grid_html, height=1000, scrolling=True)
+# scrolling=False jer nam ne treba uz 15 slika i visinu od 800px
+components.html(grid_html, height=800, scrolling=False)
