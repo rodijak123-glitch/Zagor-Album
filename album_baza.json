@@ -44,9 +44,15 @@
         "duplikati": [
             123
         ],
-        "paketi": 6,
+        "paketi": 5,
         "ponude": [],
-        "u_ruci": [],
+        "u_ruci": [
+            88,
+            60,
+            12,
+            319,
+            443
+        ],
         "zadnji_gratis": "2026-04-11 12:07:08.632263"
     }
 }
