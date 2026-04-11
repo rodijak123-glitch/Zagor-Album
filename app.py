@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # --- 1. KONFIGURACIJA I POVEZIVANJE ---
-st.set_page_config(page_title="Zagor Album: GitHub Baza", layout="wide")
+st.set_page_config(page_title="Zagor Album: Finalna Verzija", layout="wide")
 
 # Dohvaćanje tajni iz Streamlit Secrets
 try:
@@ -33,11 +33,9 @@ def spremi_na_github(baza_data):
     url = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     
-    # Prvo moramo dobiti 'sha' trenutne datoteke da bismo je prepisali
     r = requests.get(url, headers=headers)
     sha = r.json().get("sha") if r.status_code == 200 else None
     
-    # Pretvaramo bazu u JSON i onda u Base64
     novi_sadrzaj = json.dumps(baza_data, indent=4)
     encoded_content = base64.b64encode(novi_sadrzaj.encode()).decode()
     
@@ -69,6 +67,11 @@ st.markdown(f'''
         padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
         text-align: center; margin-bottom: 10px; min-height: 100px;
     }}
+    .dup-box {{
+        background: rgba(255, 255, 255, 0.1);
+        padding: 10px; border-radius: 10px; border: 1px solid #ff4b4b;
+        text-align: center; margin-bottom: 5px;
+    }}
 </style>
 ''', unsafe_allow_html=True)
 
@@ -83,7 +86,7 @@ def get_file_path(broj):
 if 'baza' not in st.session_state:
     st.session_state.baza = ucitaj_iz_githuba()
 
-st.title("🏹 Zagor: Digitalni Album (GitHub Database)")
+st.title("🏹 Zagor: Digitalni Album")
 ja = st.text_input("Unesi svoje ime:").strip()
 
 if not ja:
@@ -99,8 +102,6 @@ if ja not in st.session_state.baza:
     spremi_na_github(st.session_state.baza)
 
 moj_data = st.session_state.baza[ja]
-
-# Osiguranje da svi ključevi postoje
 for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
@@ -119,7 +120,6 @@ with col3:
     if sekundi_ostalo > 0:
         m, s = divmod(sekundi_ostalo, 60)
         st.markdown(f'<div class="metric-box">⌛ Novi paketi za:<br><span style="font-size:25px;">{m:02d}:{s:02d}</span></div>', unsafe_allow_html=True)
-        # GUMB ZA OSVJEŽAVANJE TIMERA
         if st.button("🔄 Osvježi timer"):
             st.rerun()
     else:
@@ -146,17 +146,17 @@ if moj_data.get("u_ruci"):
             st.image(get_file_path(br), use_container_width=True)
             if st.button(f"Zalijepi #{br}", key=f"z_{br}_{i}"):
                 if br in moj_data["album"]:
-                    if br not in moj_data["duplikati"]:
-                        moj_data["duplikati"].append(br)
+                    moj_data["duplikati"].append(br)
+                    moj_data["duplikati"] = sorted(list(set(moj_data["duplikati"])))
                 else:
                     moj_data["album"].append(br)
                 moj_data["u_ruci"].remove(br)
                 spremi_na_github(st.session_state.baza)
                 st.rerun()
 
-# --- 6. TRŽNICA ---
+# --- 6. TRŽNICA I DUPLIKATI ---
 st.divider()
-t1, t2 = st.tabs(["🤝 Razmjene", "📩 Sandučić"])
+t1, t2, t3 = st.tabs(["🤝 Razmjene", "📩 Sandučić", "🃏 Moji Duplikati"])
 
 with t1:
     ostali = [k for k in st.session_state.baza.keys() if k != ja]
@@ -167,37 +167,32 @@ with t1:
         interes = njegovi_dupli.intersection(fale_meni)
         if interes:
             found = True
-            st.info(f"💡 **{k}** ima sličice koje ti trebaju: `{list(interes)}`")
-            dajem = st.multiselect(f"Što nudiš {k}?", moj_data["duplikati"], key=f"d_{k}")
-            trazim = st.multiselect(f"Što želiš od {k}?", list(interes), key=f"u_{k}")
+            st.info(f"💡 **{k}** ima sličice koje ti trebaju: `{sorted(list(interes))}`")
+            dajem = st.multiselect(f"Što nudiš {k}?", sorted(moj_data["duplikati"]), key=f"d_{k}")
+            trazim = st.multiselect(f"Što želiš od {k}?", sorted(list(interes)), key=f"u_{k}")
             if st.button(f"Pošalji ponudu - {k}", key=f"b_{k}"):
                 if dajem and trazim:
                     if "ponude" not in st.session_state.baza[k]: st.session_state.baza[k]["ponude"] = []
                     st.session_state.baza[k]["ponude"].append({"od": ja, "nudi": dajem, "trazi": trazim})
                     spremi_na_github(st.session_state.baza)
                     st.success("Ponuda poslana!")
-    if not found:
-        st.write("Trenutno nitko nema duplikate koji tebi fale.")
+    if not found: st.write("Nitko trenutno nema duplikate koji tebi fale.")
 
 with t2:
-    if not moj_data.get("ponude"):
-        st.write("Nema novih ponuda u sandučiću.")
+    if not moj_data.get("ponude"): st.write("Sandučić je prazan.")
     else:
         for idx, p in enumerate(list(moj_data["ponude"])):
-            st.warning(f"📩 **{p['od']}** ti nudi {p['nudi']} u zamjenu za tvoje {p['trazi']}")
+            st.warning(f"📩 **{p['od']}** nudi {p['nudi']} za tvoje {p['trazi']}")
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("✅ Prihvati", key=f"acc_{idx}"):
                     partner = p['od']
                     for s in p["nudi"]:
                         if s not in moj_data["album"]: moj_data["album"].append(s)
-                        if s in st.session_state.baza[partner]["duplikati"]:
-                            st.session_state.baza[partner]["duplikati"].remove(s)
+                        if s in st.session_state.baza[partner]["duplikati"]: st.session_state.baza[partner]["duplikati"].remove(s)
                     for s in p["trazi"]:
-                        if s not in st.session_state.baza[partner]["album"]:
-                            st.session_state.baza[partner]["album"].append(s)
-                        if s in moj_data["duplikati"]:
-                            moj_data["duplikati"].remove(s)
+                        if s not in st.session_state.baza[partner]["album"]: st.session_state.baza[partner]["album"].append(s)
+                        if s in moj_data["duplikati"]: moj_data["duplikati"].remove(s)
                     moj_data["ponude"].pop(idx)
                     spremi_na_github(st.session_state.baza)
                     st.rerun()
@@ -206,6 +201,26 @@ with t2:
                     moj_data["ponude"].pop(idx)
                     spremi_na_github(st.session_state.baza)
                     st.rerun()
+
+with t3:
+    dupli = sorted(moj_data.get("duplikati", []))
+    if not dupli:
+        st.write("Nemaš duplikata.")
+    else:
+        st.write(f"Ukupno duplikata: **{len(dupli)}**")
+        # Gumb za brzi tekstualni ispis
+        if st.checkbox("Prikaži samo brojeve za kopiranje"):
+            st.code(", ".join(map(str, dupli)))
+        
+        # Grid prikaz duplih sličica
+        d_cols = st.columns(6)
+        for i, br in enumerate(dupli):
+            with d_cols[i % 6]:
+                img_b64 = get_base64(get_file_path(br))
+                if img_b64:
+                    st.markdown(f'<div class="dup-box"><img src="data:image/jpeg;base64,{img_b64}" style="width:100%; border-radius:5px;"><br>#{br}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="dup-box">#{br}</div>', unsafe_allow_html=True)
 
 # --- 7. ALBUM GRID ---
 st.divider()
@@ -226,6 +241,3 @@ grid_html += '</div>'
 
 import streamlit.components.v1 as components
 components.html(grid_html, height=1200)
-
-st.write("---")
-st.caption("Sustav automatski sinkronizira bazu s GitHubom nakon svakog poteza.")
