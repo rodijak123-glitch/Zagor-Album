@@ -183,7 +183,7 @@ for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
 # --- KLJUČNI DIO: PROVJERA JE LI ALBUM POPUNJEN (458 sličica) ---
-je_popunjen = len(set(moj_data["album"])) >= 458
+je_popunjen = len(set(moj_data["album"])) >= 2
 
 if je_popunjen:
     # --- ANIMACIJA I POBJEDNIČKO SUČELJE ---
