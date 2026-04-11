@@ -174,7 +174,7 @@ for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
 # --- 5. POBJEDNIČKA SEKCIJA ---
-je_popunjen = len(set(moj_data["album"])) >= 458
+je_popunjen = len(set(moj_data["album"])) >= 2
 
 if je_popunjen:
     import streamlit.components.v1 as components
