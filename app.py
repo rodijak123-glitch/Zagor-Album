@@ -6,9 +6,11 @@ import base64
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+from fpdf import FPDF
+import io
 
 # --- 1. KONFIGURACIJA I POVEZIVANJE ---
-st.set_page_config(page_title="Zagor Album: Finalna Verzija", layout="wide")
+st.set_page_config(page_title="Zagor Album: KRAJ AVANTURE", layout="wide")
 
 # Dohvaćanje tajni iz Streamlit Secrets
 try:
@@ -48,13 +50,21 @@ def spremi_na_github(baza_data):
         
     requests.put(url, headers=headers, json=payload)
 
-# --- 2. DIZAJN I STIL ---
+# --- 2. DIZAJN, STIL I PDF FUNKCIJA ---
 def get_base64(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     return None
 
+def get_file_path(broj):
+    f = "slike/"
+    if broj <= 75: return f"{f}TN_ZG_EXT_{broj}.jpeg"
+    elif broj <= 385: return f"{f}TN_ZG_LEX_{broj}.jpeg"
+    elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
+    else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
+
+# CSS za pozadinu i stilove
 bg_data = get_base64('image_50927d.jpg')
 st.markdown(f'''
 <style>
@@ -63,24 +73,91 @@ st.markdown(f'''
         background-size: cover; background-attachment: fixed; color: white;
     }}
     .metric-box {{
-        background: rgba(255, 75, 75, 0.3);
-        padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
+        background: rgba(255, 75, 75, 0.3); padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
         text-align: center; margin-bottom: 10px; min-height: 100px;
     }}
     .dup-box {{
-        background: rgba(255, 255, 255, 0.1);
-        padding: 10px; border-radius: 10px; border: 1px solid #ff4b4b;
+        background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 10px; border: 1px solid #ff4b4b;
         text-align: center; margin-bottom: 5px;
+    }}
+    /* Stil za pobjedničku poruku */
+    .winner-msg {{
+        font-size: 50px; font-weight: bold; text-align: center; color: #ff4b4b;
+        text-shadow: 2px 2px 10px #fff; margin-top: 20px; margin-bottom: 20px;
     }}
 </style>
 ''', unsafe_allow_html=True)
 
-def get_file_path(broj):
-    f = "slike/"
-    if broj <= 75: return f"{f}TN_ZG_EXT_{broj}.jpeg"
-    elif broj <= 385: return f"{f}TN_ZG_LEX_{broj}.jpeg"
-    elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
-    else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
+# --- FUNKCIJA ZA STVARANJE PDF ALBUMA ---
+def generiraj_pdf_album(korisnik_ime, lista_slicica):
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # 1. Stranica: Naslovnica
+    pdf.add_page()
+    if os.path.exists('image_4540f7.jpg'):
+        pdf.image('image_4540f7.jpg', x=10, y=10, w=190)
+    
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_y(220)
+    pdf.set_text_color(255, 75, 75) # Zagor crvena
+    pdf.cell(0, 15, f"DIGITALNI ALBUM", align='C', ln=1)
+    
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 10, f"Vlasnik: {korisnik_ime}", align='C', ln=1)
+    
+    pdf.set_font("Helvetica", "I", 12)
+    pdf.cell(0, 10, f"Popunjen: {datetime.now().strftime('%d.%m.%Y.')}", align='C', ln=1)
+
+    # 2. Stranice sa sličicama
+    pdf.set_text_color(0, 0, 0) # Vrati na crnu
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Pregled Sličica (Popunjen Album)", ln=1, align='C')
+    pdf.ln(5)
+
+    # Postavke mreže (Grid)
+    x_start = 10
+    y_start = 30
+    thumb_w = 35 # Širina sličice
+    thumb_h = 48 # Visina sličice
+    cols = 5
+    rows_per_page = 4
+    
+    for i in range(1, 459): # Sve sličice od 1 do 458
+        file_path = get_file_path(i)
+        
+        # Izračun pozicije
+        idx = i - 1
+        page_idx = idx % (cols * rows_per_page)
+        col = page_idx % cols
+        row = page_idx // cols
+        
+        # Nova stranica ako je puna
+        if idx > 0 and page_idx == 0:
+            pdf.add_page()
+            
+        cur_x = x_start + (col * (thumb_w + 3))
+        cur_y = y_start + (row * (thumb_h + 8))
+        
+        if i in lista_slicica and os.path.exists(file_path):
+            # Zalijepljena slika
+            pdf.image(file_path, x=cur_x, y=cur_y, w=thumb_w, h=thumb_h)
+        else:
+            # Prazno mjesto (Ovo se ne bi smjelo dogoditi ako je popunjen)
+            pdf.rect(cur_x, cur_y, thumb_w, thumb_h)
+            pdf.set_xy(cur_x, cur_y + (thumb_h/2))
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(thumb_w, 5, f"#{i}", align='C')
+            
+        # Broj sličice ispod
+        pdf.set_xy(cur_x, cur_y + thumb_h + 1)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(thumb_w, 4, f"Br. {i}", align='C')
+
+    # Vrati PDF kao byte stream za download
+    return pdf.output()
 
 # --- 3. LOGIKA KORISNIKA ---
 if 'baza' not in st.session_state:
@@ -105,7 +182,63 @@ moj_data = st.session_state.baza[ja]
 for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
-# --- 4. BROJČANICI I TIMER ---
+# --- KLJUČNI DIO: PROVJERA JE LI ALBUM POPUNJEN (458 sličica) ---
+je_popunjen = len(set(moj_data["album"])) >= 458
+
+if je_popunjen:
+    # --- ANIMACIJA I POBJEDNIČKO SUČELJE ---
+    import streamlit.components.v1 as components
+    
+    # 1. Konfeti Animacija (JavaScript)
+    components.html('''
+        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+        <script>
+            var end = Date.now() + (5 * 1000); // 5 sekundi
+            var colors = ['#ff4b4b', '#ffffff', '#ffcc00']; // Zagor boje
+            
+            (function frame() {
+              confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: colors });
+              confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: colors });
+              if (Date.now() < end) { requestAnimationFrame(frame); }
+            }());
+        </script>
+    ''', height=1) # Nevidljivi container
+
+    # 2. Velika Pobjednička Poruka
+    st.markdown(f'<div class="winner-msg">🏅 BRAVO {ja.upper()}, ALBUM JE POPUNJEN! 🏅</div>', unsafe_allow_html=True)
+    
+    # 3. Naslovna Slika (Velika, preko ekrana)
+    if os.path.exists('image_4540f7.jpg'):
+        st.image('image_4540f7.jpg', use_container_width=True)
+    
+    # 4. Sekcija za Download PDF-a
+    st.divider()
+    st.subheader("🎉 Tvoj osobni popunjeni album 🎉")
+    st.write("Klikni na gumb ispod kako bi preuzeo svoj cijeli album u PDF formatu za uspomenu!")
+    
+    # Generiranje PDF-a
+    with st.spinner("Pripremam tvoj PDF album, ovo može potrajati par sekundi..."):
+        try:
+            pdf_bytes = generiraj_pdf_album(ja, moj_data["album"])
+            st.download_button(
+                label=f"📥 SKINI ALBUM U PDF-u ({ja}_ZagorAlbum.pdf)",
+                data=pdf_bytes,
+                file_name=f"{ja}_ZagorAlbum.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"Došlo je do greške pri stvaranju PDF-a: {e}")
+            
+    # Opcija za povratak na tržnicu (ako želi još razmjenjivati duplikate)
+    if st.checkbox("Prikaži standardno sučelje (za razmjenu duplikata)"):
+        st.write("Standardno sučelje je vidljivo ispod.")
+    else:
+        st.caption("Čestitamo! Tvoja avantura sakupljanja je završila.")
+        st.stop() # Zaustavlja ostatak koda, prikazuje se samo pobjednički dio
+
+# --- OSTATAK STANDARDNOG KODA (Brojčanici, Paketi, Tržnica, Grid) ---
+# ... (Ovaj dio se prikazuje samo ako album NIJE popunjen, ili ako je popunjen a kvačica je gore označena) ...
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -136,7 +269,6 @@ with col3:
             spremi_na_github(st.session_state.baza)
             st.rerun()
 
-# --- 5. LIJEPLJENJE ---
 if moj_data.get("u_ruci"):
     st.write("---")
     st.subheader("Novi paket sadrži:")
@@ -154,7 +286,6 @@ if moj_data.get("u_ruci"):
                 spremi_na_github(st.session_state.baza)
                 st.rerun()
 
-# --- 6. TRŽNICA I DUPLIKATI ---
 st.divider()
 t1, t2, t3 = st.tabs(["🤝 Razmjene", "📩 Sandučić", "🃏 Moji Duplikati"])
 
@@ -204,15 +335,11 @@ with t2:
 
 with t3:
     dupli = sorted(moj_data.get("duplikati", []))
-    if not dupli:
-        st.write("Nemaš duplikata.")
+    if not dupli: st.write("Nemaš duplikata.")
     else:
         st.write(f"Ukupno duplikata: **{len(dupli)}**")
-        # Gumb za brzi tekstualni ispis
         if st.checkbox("Prikaži samo brojeve za kopiranje"):
             st.code(", ".join(map(str, dupli)))
-        
-        # Grid prikaz duplih sličica
         d_cols = st.columns(6)
         for i, br in enumerate(dupli):
             with d_cols[i % 6]:
@@ -222,7 +349,6 @@ with t3:
                 else:
                     st.markdown(f'<div class="dup-box">#{br}</div>', unsafe_allow_html=True)
 
-# --- 7. ALBUM GRID ---
 st.divider()
 st.subheader("📖 Pregled Albuma")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
@@ -241,3 +367,6 @@ grid_html += '</div>'
 
 import streamlit.components.v1 as components
 components.html(grid_html, height=1200)
+
+st.write("---")
+st.caption("Sustav automatski sinkronizira bazu s GitHubom nakon svakog poteza.")
