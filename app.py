@@ -160,7 +160,7 @@ for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
 # --- 5. POBJEDNIČKA SEKCIJA (Baloni i Snijeg) ---
-je_popunjen = len(set(moj_data["album"])) >= 458
+je_popunjen = len(set(moj_data["album"])) >= 2
 
 if je_popunjen:
     st.balloons()
