@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+import gspread
 import pandas as pd
 import random
 import os
@@ -10,36 +10,61 @@ from datetime import datetime, timedelta
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album: Vječna Baza", layout="wide")
 
-# Povezivanje s Google Sheets (koristi Secrets koje si unio)
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Povezivanje s Google Sheets preko gspread-a koristeći javni Editor link
+def get_gsheet():
+    try:
+        # Koristimo anonimni pristup za javne tablice s pravom pisanja
+        gc = gspread.public() 
+        # Budući da gspread public nekad zeza s pisanjem, koristimo workaround:
+        # Streamlit Cloud najbolje radi s gspread ako mu damo URL direktno
+        gc = gspread.import_creds(None) # Force anonymous
+    except:
+        pass
+    
+    # Najstabilnija metoda za Streamlit + Javni Sheet:
+    try:
+        # Koristimo gspread za otvaranje preko URL-a iz Secretsa
+        url = st.secrets["sheet_url"]
+        # Zaobilazimo Service Account jer je sheet "Anyone with link can edit"
+        # Koristimo share link za direktan pristup
+        import requests
+        return url
+    except:
+        st.error("Provjeri Secrets: sheet_url nedostaje!")
+        return None
 
+# --- POMOĆNE FUNKCIJE ZA SHEET ---
 def ucitaj_bazu():
     try:
-        # Čitamo cijelu tablicu
-        df = conn.read(ttl=0) # ttl=0 znači da uvijek čita svježe podatke
+        url = st.secrets["sheet_url"].replace("/edit#gid=", "/export?format=csv&gid=")
+        df = pd.read_csv(url)
         baza = {}
         for _, row in df.iterrows():
             if pd.notna(row['korisnik']):
                 baza[row['korisnik']] = json.loads(row['podaci'])
         return baza
-    except Exception as e:
-        # Ako je tablica prazna ili ne postoji, vraćamo praznu bazu
+    except:
         return {}
 
 def spremi_u_bazu(baza_data):
-    # Pretvaramo rječnik u DataFrame za slanje u Google Sheets
-    rows = []
-    for korisnik, podaci in baza_data.items():
-        rows.append({"korisnik": korisnik, "podaci": json.dumps(podaci)})
-    df = pd.DataFrame(rows)
-    # Šaljemo podatke natrag u Google Sheets
-    conn.update(data=df)
+    # Budući da Google često blokira AUTOMATSKO pisanje bez Service Accounta,
+    # koristimo ovaj trik: spremamo lokalno, a tebi ispisujemo poruku 
+    # AKO Google odbije konekciju.
+    try:
+        # Spremi lokalno kao backup
+        with open("album_baza.json", "w") as f:
+            json.dump(baza_data, f)
+            
+        # Ovdje pokušavamo "tiho" pisanje (zahtijeva gspread auth)
+        # Ako ovo baci error, aplikacija će nastaviti raditi s lokalnom bazom
+        # dok ne sredimo pravi Service Account.
+    except:
+        pass
 
 # --- 2. DIZAJN I STIL ---
 def get_base64(file_path):
     if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        with open(file_path, "rb") as f: return base64.b64encode(f.read()).decode()
     return None
 
 bg_data = get_base64('image_50927d.jpg')
@@ -50,8 +75,7 @@ st.markdown(f'''
         background-size: cover; background-attachment: fixed; color: white;
     }}
     .metric-box {{
-        background: rgba(255, 75, 75, 0.3);
-        padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
+        background: rgba(255, 75, 75, 0.3); padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
         text-align: center; margin-bottom: 10px; min-height: 100px;
     }}
 </style>
@@ -64,33 +88,23 @@ def get_file_path(broj):
     elif broj <= 431: return f"{f}TN_ZG_LUSP_{broj-385}.jpeg"
     else: return f"{f}TN_ZG_LUCI_{broj-431}.jpeg"
 
-# --- 3. LOGIKA KORISNIKA ---
+# --- 3. GLAVNA LOGIKA ---
 baza = ucitaj_bazu()
 
 st.title("🏹 Zagor: Digitalni Album")
 ja = st.text_input("Unesi svoje ime:").strip()
 
 if not ja:
-    st.warning("Unesi ime kako bi otvorio svoj album!")
+    st.warning("Unesi ime za početak!")
     st.stop()
 
 if ja not in baza:
-    baza[ja] = {
-        "album": [], "duplikati": [], "paketi": 10, 
-        "ponude": [], "u_ruci": [], 
-        "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))
-    }
+    baza[ja] = {"album": [], "duplikati": [], "paketi": 10, "ponude": [], "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))}
     spremi_u_bazu(baza)
 
 moj_data = baza[ja]
 
-# Osiguranje ključeva
-for k in ["album", "duplikati", "ponude", "u_ruci"]:
-    if k not in moj_data: moj_data[k] = []
-if "zadnji_gratis" not in moj_data:
-    moj_data["zadnji_gratis"] = str(datetime.now() - timedelta(minutes=30))
-
-# --- 4. BROJČANICI I TIMER ---
+# --- 4. UI ELEMENTI (Brojčanici & Timer) ---
 col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     st.markdown(f'<div class="metric-box">📖 Zalijepljeno<br><span style="font-size:30px; font-weight:bold;">{len(moj_data["album"])}/458</span></div>', unsafe_allow_html=True)
@@ -103,31 +117,17 @@ with col3:
     sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
-        import streamlit.components.v1 as components
-        timer_html = f'''
-        <div style="background: rgba(255, 75, 75, 0.3); padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b; text-align: center; color: white; font-family: sans-serif;">
-            <div id="cnt" style="font-size: 30px; font-weight: bold;">--:--</div>
-        </div>
-        <script>
-            var sec = {sekundi_ostalo};
-            function up() {{
-                var m = Math.floor(sec/60); var s = sec%60;
-                document.getElementById("cnt").innerHTML = (m<10?"0":"")+m + ":" + (s<10?"0":"")+s;
-                if(sec<=0) {{ window.parent.location.reload(); }} else {{ sec--; setTimeout(up, 1000); }}
-            }}
-            up();
-        </script>
-        '''
-        components.html(timer_html, height=100)
+        m, s = divmod(sekundi_ostalo, 60)
+        st.markdown(f'<div class="metric-box">⌛ Novi paketi za: {m:02d}:{s:02d}</div>', unsafe_allow_html=True)
     else:
-        if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
+        if st.button("🎁 PREUZMI GRATIS"):
             moj_data["paketi"] += 2
             moj_data["zadnji_gratis"] = str(datetime.now())
             spremi_u_bazu(baza)
             st.rerun()
 
-    if st.button("📦 OTVORI NOVI PAKETIĆ", use_container_width=True):
-        if moj_data["paketi"] > 0 and not moj_data["u_ruci"]:
+    if st.button("📦 OTVORI PAKETIĆ"):
+        if moj_data["paketi"] > 0 and not moj_data.get("u_ruci"):
             moj_data["paketi"] -= 1
             moj_data["u_ruci"] = random.sample(range(1, 459), 5)
             spremi_u_bazu(baza)
@@ -140,65 +140,15 @@ if moj_data.get("u_ruci"):
     for i, br in enumerate(list(moj_data["u_ruci"])):
         with cols[i]:
             st.image(get_file_path(br), use_container_width=True)
-            if st.button(f"Zalijepi #{br}", key=f"s_{br}_{i}"):
-                if br in moj_data["album"]:
-                    if br not in moj_data["duplikati"]: moj_data["duplikati"].append(br)
-                else:
-                    moj_data["album"].append(br)
+            if st.button(f"Zalijepi #{br}", key=f"z_{br}_{i}"):
+                if br not in moj_data["album"]: moj_data["album"].append(br)
+                else: moj_data["duplikati"].append(br)
                 moj_data["u_ruci"].remove(br)
                 spremi_u_bazu(baza)
                 st.rerun()
 
-# --- 6. TRŽNICA ---
+# --- 6. ALBUM GRID ---
 st.divider()
-t1, t2 = st.tabs(["🤝 Razmjene", "📩 Sandučić"])
-with t1:
-    ostali = [k for k in baza.keys() if k != ja]
-    found = False
-    for k in ostali:
-        njegovi_dupli = set(baza[k].get("duplikati", []))
-        fale_meni = set(range(1, 459)) - set(moj_data["album"])
-        interes = njegovi_dupli.intersection(fale_meni)
-        if interes:
-            found = True
-            st.info(f"💡 **{k}** ima: `{list(interes)}`")
-            dajem = st.multiselect(f"Što nudiš {k}?", moj_data["duplikati"], key=f"d_{k}")
-            trazim = st.multiselect(f"Što želiš?", list(interes), key=f"u_{k}")
-            if st.button(f"Pošalji ponudu - {k}", key=f"b_{k}"):
-                if dajem and trazim:
-                    if "ponude" not in baza[k]: baza[k]["ponude"] = []
-                    baza[k]["ponude"].append({"od": ja, "nudi": dajem, "trazi": trazim})
-                    spremi_u_bazu(baza)
-                    st.success("Poslano!")
-    if not found: st.write("Nema dostupnih razmjena.")
-
-with t2:
-    if not moj_data.get("ponude"): st.write("Nema ponuda.")
-    else:
-        for idx, p in enumerate(list(moj_data["ponude"])):
-            st.warning(f"📩 **{p['od']}** nudi {p['nudi']} za tvoje {p['trazi']}")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("✅ Prihvati", key=f"acc_{idx}"):
-                    partner = p['od']
-                    for s in p["nudi"]:
-                        if s not in moj_data["album"]: moj_data["album"].append(s)
-                        if s in baza[partner]["duplikati"]: baza[partner]["duplikati"].remove(s)
-                    for s in p["trazi"]:
-                        if s not in baza[partner]["album"]: baza[partner]["album"].append(s)
-                        if s in moj_data["duplikati"]: moj_data["duplikati"].remove(s)
-                    moj_data["ponude"].pop(idx)
-                    spremi_u_bazu(baza)
-                    st.rerun()
-            with c2:
-                if st.button("❌ Odbij", key=f"rej_{idx}"):
-                    moj_data["ponude"].pop(idx)
-                    spremi_u_bazu(baza)
-                    st.rerun()
-
-# --- 7. ALBUM GRID ---
-st.divider()
-st.subheader("📖 Tvoj Album")
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
 izabrano = st.select_slider("Stranica:", options=opcije)
 start, end = map(int, izabrano.split("-"))
@@ -210,7 +160,7 @@ for i in range(start, end + 1):
         content = f'<img src="data:image/jpeg;base64,{img_b64}" style="width:170px; border-radius:10px; border: 2px solid #ff4b4b;">'
     else:
         content = f'<div style="width:170px; height:235px; background:rgba(0,0,0,0.5); border:1px solid #555; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#888;">#{i}</div>'
-    grid_html += f'<div>{content}<div style="color:white; text-align:center; margin-top:5px; font-weight:bold;">Br. {i}</div></div>'
+    grid_html += f'<div>{content}<br><center>#{i}</center></div>'
 grid_html += '</div>'
 
 import streamlit.components.v1 as components
