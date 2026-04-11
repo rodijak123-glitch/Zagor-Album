@@ -100,9 +100,8 @@ if ja not in st.session_state.baza:
 
 moj_data = st.session_state.baza[ja]
 
-# Osiguranje da svi ključevi postoje (za stare baze)
-za_provjeru = ["album", "duplikati", "ponude", "u_ruci"]
-for k in za_provjeru:
+# Osiguranje da svi ključevi postoje
+for k in ["album", "duplikati", "ponude", "u_ruci"]:
     if k not in moj_data: moj_data[k] = []
 
 # --- 4. BROJČANICI I TIMER ---
@@ -120,6 +119,9 @@ with col3:
     if sekundi_ostalo > 0:
         m, s = divmod(sekundi_ostalo, 60)
         st.markdown(f'<div class="metric-box">⌛ Novi paketi za:<br><span style="font-size:25px;">{m:02d}:{s:02d}</span></div>', unsafe_allow_html=True)
+        # GUMB ZA OSVJEŽAVANJE TIMERA
+        if st.button("🔄 Osvježi timer"):
+            st.rerun()
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
@@ -187,12 +189,10 @@ with t2:
             with c1:
                 if st.button("✅ Prihvati", key=f"acc_{idx}"):
                     partner = p['od']
-                    # Meni dodaj, njemu makni
                     for s in p["nudi"]:
                         if s not in moj_data["album"]: moj_data["album"].append(s)
                         if s in st.session_state.baza[partner]["duplikati"]:
                             st.session_state.baza[partner]["duplikati"].remove(s)
-                    # Njemu dodaj, meni makni
                     for s in p["trazi"]:
                         if s not in st.session_state.baza[partner]["album"]:
                             st.session_state.baza[partner]["album"].append(s)
