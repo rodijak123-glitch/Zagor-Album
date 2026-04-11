@@ -1,11 +1,12 @@
 {
     "Nike": {
-        "album": [],
+        "album": [
+            99
+        ],
         "duplikati": [],
         "paketi": 11,
         "ponude": [],
         "u_ruci": [
-            99,
             436,
             280,
             383,
