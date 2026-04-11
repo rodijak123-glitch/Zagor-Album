@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import json
 import random
@@ -9,34 +10,38 @@ from datetime import datetime, timedelta
 # --- 1. KONFIGURACIJA ---
 st.set_page_config(page_title="Zagor Album: Vječna Baza", layout="wide")
 
-# Putanja do tvoje tablice (čitanje)
+# Povezivanje s Google Sheets (koristi Secrets [connections.gsheets])
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def ucitaj_bazu():
     try:
-        # Čitamo tablicu preko CSV izvoza (najbrže i najstabilnije za čitanje)
-        url = st.secrets["sheet_url"].replace("/edit#gid=", "/export?format=csv&gid=")
-        df = pd.read_csv(url)
+        # Čitamo tablicu (ttl=0 osigurava da ne čita stare podatke iz predmemorije)
+        df = conn.read(ttl=0)
         baza = {}
-        for _, row in df.iterrows():
-            if pd.notna(row['korisnik']):
-                baza[row['korisnik']] = json.loads(row['podaci'])
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                if pd.notna(row['korisnik']):
+                    baza[row['korisnik']] = json.loads(row['podaci'])
         return baza
     except:
-        # Ako tablica ne odgovori, pokušaj lokalni backup
-        if os.path.exists("album_baza.json"):
-            with open("album_baza.json", "r") as f:
-                return json.load(f)
         return {}
 
 def spremi_u_bazu(baza_data):
-    # Lokalni backup (da gumbi rade ODMAH)
-    with open("album_baza.json", "w") as f:
-        json.dump(baza_data, f)
-    
-    # Napomena: Za pravo pisanje u Google Sheet bez Service Accounta, 
-    # Google zahtijeva složeniju autorizaciju. 
-    # Ovaj lokalni file će čuvati podatke dok je aplikacija aktivna.
+    # Priprema podataka za Google Sheets
+    rows = []
+    for korisnik, podaci in baza_data.items():
+        rows.append({"korisnik": korisnik, "podaci": json.dumps(podaci)})
+    df = pd.DataFrame(rows)
+    # SLANJE U GOOGLE SHEETS
+    try:
+        conn.update(data=df)
+        # Također spremi lokalno za svaki slučaj
+        with open("album_baza.json", "w") as f:
+            json.dump(baza_data, f)
+    except Exception as e:
+        st.error(f"Greška pri spremanju u Sheets: {e}")
 
-# --- 2. DIZAJN ---
+# --- 2. DIZAJN I STIL ---
 def get_base64(file_path):
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
@@ -51,7 +56,8 @@ st.markdown(f'''
         background-size: cover; background-attachment: fixed; color: white;
     }}
     .metric-box {{
-        background: rgba(255, 75, 75, 0.3); padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
+        background: rgba(255, 75, 75, 0.3);
+        padding: 20px; border-radius: 15px; border: 2px solid #ff4b4b;
         text-align: center; margin-bottom: 10px; min-height: 100px;
     }}
 </style>
@@ -72,13 +78,14 @@ st.title("🏹 Zagor: Digitalni Album")
 ja = st.text_input("Tvoje ime:").strip()
 
 if not ja:
-    st.warning("Unesi ime!")
+    st.warning("Prijavi se za početak!")
     st.stop()
 
 if ja not in st.session_state.baza:
     st.session_state.baza[ja] = {
         "album": [], "duplikati": [], "paketi": 10, 
-        "u_ruci": [], "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))
+        "ponude": [], "u_ruci": [], 
+        "zadnji_gratis": str(datetime.now() - timedelta(minutes=30))
     }
     spremi_u_bazu(st.session_state.baza)
 
@@ -94,14 +101,11 @@ with col2:
 with col3:
     sad = datetime.now()
     zadnje = datetime.fromisoformat(moj_data["zadnji_gratis"])
-    razlika = (sad - zadnje).total_seconds()
-    sekundi_ostalo = int(max(0, 1800 - razlika))
+    sekundi_ostalo = int(max(0, 1800 - (sad - zadnje).total_seconds()))
 
     if sekundi_ostalo > 0:
         m, s = divmod(sekundi_ostalo, 60)
         st.markdown(f'<div class="metric-box">⌛ Novi paketi za:<br><span style="font-size:25px;">{m:02d}:{s:02d}</span></div>', unsafe_allow_html=True)
-        if st.button("🔄 Osvježi timer"):
-            st.rerun()
     else:
         if st.button("🎁 PREUZMI 2 GRATIS PAKETA", use_container_width=True):
             moj_data["paketi"] += 2
@@ -133,10 +137,58 @@ if moj_data.get("u_ruci"):
                 spremi_u_bazu(st.session_state.baza)
                 st.rerun()
 
-# --- 6. ALBUM GRID ---
+# --- 6. TRŽNICA I SANDUČIĆ (Vraćen kompletan kod) ---
+st.divider()
+t1, t2 = st.tabs(["🤝 Razmjene", "📩 Sandučić"])
+with t1:
+    ostali = [k for k in st.session_state.baza.keys() if k != ja]
+    found = False
+    for k in ostali:
+        njegovi_dupli = set(st.session_state.baza[k].get("duplikati", []))
+        fale_meni = set(range(1, 459)) - set(moj_data["album"])
+        interes = njegovi_dupli.intersection(fale_meni)
+        if interes:
+            found = True
+            st.info(f"💡 **{k}** ima sličice za tebe!")
+            dajem = st.multiselect(f"Što nudiš {k}?", moj_data["duplikati"], key=f"d_{k}")
+            trazim = st.multiselect(f"Što želiš?", list(interes), key=f"u_{k}")
+            if st.button(f"Pošalji ponudu - {k}", key=f"b_{k}"):
+                if dajem and trazim:
+                    if "ponude" not in st.session_state.baza[k]: st.session_state.baza[k]["ponude"] = []
+                    st.session_state.baza[k]["ponude"].append({"od": ja, "nudi": dajem, "trazi": trazim})
+                    spremi_u_bazu(st.session_state.baza)
+                    st.success("Ponuda poslana!")
+    if not found: st.write("Nema dostupnih razmjena.")
+
+with t2:
+    if not moj_data.get("ponude"): st.write("Nema novih ponuda.")
+    else:
+        for idx, p in enumerate(list(moj_data["ponude"])):
+            st.warning(f"📩 **{p['od']}** nudi {p['nudi']} za tvoje {p['trazi']}")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Prihvati", key=f"acc_{idx}"):
+                    partner = p['od']
+                    # Razmjena
+                    for s in p["nudi"]:
+                        if s not in moj_data["album"]: moj_data["album"].append(s)
+                        if s in st.session_state.baza[partner]["duplikati"]: st.session_state.baza[partner]["duplikati"].remove(s)
+                    for s in p["trazi"]:
+                        if s not in st.session_state.baza[partner]["album"]: st.session_state.baza[partner]["album"].append(s)
+                        if s in moj_data["duplikati"]: moj_data["duplikati"].remove(s)
+                    moj_data["ponude"].pop(idx)
+                    spremi_u_bazu(st.session_state.baza)
+                    st.rerun()
+            with c2:
+                if st.button("❌ Odbij", key=f"rej_{idx}"):
+                    moj_data["ponude"].pop(idx)
+                    spremi_u_bazu(st.session_state.baza)
+                    st.rerun()
+
+# --- 7. ALBUM GRID ---
 st.divider()
 opcije = [f"{i}-{min(i+19, 458)}" for i in range(1, 459, 20)]
-izabrano = st.select_slider("Stranica:", options=opcije)
+izabrano = st.select_slider("Prelistaj album:", options=opcije)
 start, end = map(int, izabrano.split("-"))
 
 grid_html = '<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 15px; justify-items:center;">'
