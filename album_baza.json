@@ -19,11 +19,12 @@
             70,
             44
         ],
-        "duplikati": [],
+        "duplikati": [
+            123
+        ],
         "paketi": 8,
         "ponude": [],
         "u_ruci": [
-            123,
             374,
             226
         ],
